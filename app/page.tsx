@@ -135,7 +135,8 @@ export default function Home() {
     () => [
       {
         title: "Moda em minutos",
-        subtitle: "O primeiro delivery de moda em São Paulo",
+        subtitle:
+          "O primeiro delivery de moda do mundo com curadoria de excelência",
         image:
           "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Untitled%20design-8.png",
         href: "/collections/sobre",
