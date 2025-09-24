@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Vars globais ===== */
+:root {
+  /* Canvas (fundo da página) */
+  --background: #f6f0e9; /* off-white quente, fundo global */
+  --foreground: #111111;
+
+  /* Layout */
+  --bottom-nav-h: 88px;
+
+  /* Paleta de superfícies */
+  --surface: #f3efe9; /* cards/botões/bottom bar */
+  --surface-strong: #ede7e1; /* contraste leve dentro de cards */
+  --chip: #e8e1da; /* pills/inputs mais quentes */
+  --border-warm: #e0d7cc; /* borda quentinha */
+  --shadow-soft: 0 6px 24px rgba(17, 17, 17, 0.06);
+}
+
+/* ===== Base ===== */
+html,
+body {
+  background-color: var(--background) !important;
+  color: var(--foreground);
+  height: 100%;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Reserva espaço para a BottomNav fixa */
+.with-bottom-nav {
+  padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
+}
+
+/* Oculta scrollbar em listas horizontais */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ===== Utilitários de tema ===== */
+.canvas {
+  background-color: var(--background) !important;
+}
+.surface {
+  background-color: var(--surface) !important;
+}
+.surface-strong {
+  background-color: var(--surface-strong) !important;
+}
+.chip {
+  background-color: var(--chip) !important;
+}
+.border-warm {
+  border-color: var(--border-warm) !important;
+}
+.shadow-soft {
+  box-shadow: var(--shadow-soft) !important;
+}
+
+/* ===== Overrides quentes para classes Tailwind comuns ===== */
+
+/* Todo bg branco vira a nossa superfície quente */
+.bg-white {
+  background-color: var(--surface) !important;
+}
+
+/* Versões com opacidade do Tailwind */
+.bg-white\/95 {
+  background-color: rgba(243, 239, 233, 0.95) !important;
+}
+.bg-white\/90 {
+  background-color: rgba(243, 239, 233, 0.9) !important;
+}
+.bg-white\/85 {
+  background-color: rgba(243, 239, 233, 0.85) !important;
+}
+.bg-white\/80 {
+  background-color: rgba(243, 239, 233, 0.8) !important;
+}
+.bg-white\/70 {
+  background-color: rgba(243, 239, 233, 0.7) !important;
+}
+
+/* Qualquer coisa que era "cinza claro" → chip quente */
+.bg-neutral-50,
+.bg-gray-50,
+.bg-neutral-100,
+.bg-gray-100 {
+  background-color: var(--chip) !important;
+}
+
+/* Bordas frias → borda quente */
+.border-gray-200,
+.border-neutral-200 {
+  border-color: var(--border-warm) !important;
+}
+.ring-gray-200,
+.ring-neutral-200 {
+  --tw-ring-color: var(--border-warm) !important;
+}
