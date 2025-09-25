@@ -416,50 +416,63 @@ export default function Home() {
       className="canvas text-black max-w-md mx-auto min-h-screen px-5 with-bottom-nav !bg-[var(--background)]"
       style={{ backgroundColor: "var(--background)" }}
     >
-      {/* Header */}
-      <div className="pt-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-[32px] leading-8 font-bold tracking-tight">
-            Look
-          </h1>
-          <p className="mt-1 text-[13px] text-gray-600">
-            Ready to wear in minutes
-          </p>
-        </div>
+      {/* Header com faixa marrom (refinado) */}
+      <div className="-mx-5 px-5 relative z-0 mb-7">
+        {/* Fundo marrom, com canto inferior arredondado e um pouco mais alto */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-24 z-0 rounded-b-3xl"
+          style={{ backgroundColor: "#8B5E3C" }}
+        />
 
-        {/* Menu ou Login */}
-        {!loading && !profile ? (
-          <Link
-            href="/auth"
-            className="mt-1 inline-flex items-center rounded-full border border-warm bg-[color:var(--surface)] shadow-soft px-3 h-9 text-sm font-medium hover:opacity-95 transition"
-            aria-label="Login"
-            title="Login"
-          >
-            Login
-          </Link>
-        ) : (
-          <button
-            onClick={() => setDrawerOpen(true)}
-            className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-warm bg-[color:var(--surface)] shadow-soft active:scale-[0.98] transition"
-            aria-label="Menu"
-            title="Menu"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              className="text-gray-800"
+        {/* Conteúdo do header sobre o fundo */}
+        <div className="relative z-10 pt-6 flex items-start justify-between">
+          <div>
+            {/* Título em tom claro e elegante */}
+            <h1 className="text-[32px] leading-8 font-bold tracking-tight text-[#F5EEE6]">
+              Look
+            </h1>
+            {/* Subtítulo com leve transparência para suavizar */}
+            <p className="mt-1 text-[13px] text-[#F5EEE6]/80">
+              Ready to wear in minutes
+            </p>
+          </div>
+
+          {/* Botão de Login / Menu, conversando com o fundo marrom */}
+          {!loading && !profile ? (
+            <Link
+              href="/auth"
+              className="mt-1 inline-flex items-center rounded-full border px-4 h-9 text-sm font-medium transition
+                   bg-white/90 text-[#3A281B] border-[#6F4A2D] shadow-[0_1px_0_rgba(0,0,0,0.06)] hover:bg-white"
+              aria-label="Login"
+              title="Login"
             >
-              <path
-                strokeWidth="2"
-                strokeLinecap="round"
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
-        )}
+              Login
+            </Link>
+          ) : (
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border
+                   bg-white/90 text-[#3A281B] border-[#6F4A2D] shadow-[0_1px_0_rgba(0,0,0,0.06)] hover:bg-white active:scale-[0.98] transition"
+              aria-label="Menu"
+              title="Menu"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                className="text-[#3A281B]"
+              >
+                <path
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Drawer */}
@@ -748,20 +761,25 @@ export default function Home() {
               {[...selectedCategories].map((c) => (
                 <span
                   key={`c-${c}`}
-                  className="px-3 h-9 rounded-full border text-sm capitalize bg-black text-white border-black"
+                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
+                  "
                 >
                   {c}
                 </span>
               ))}
               {selectedCategories.size === 0 && chipCategory !== "Tudo" && (
-                <span className="px-3 h-9 rounded-full border text-sm capitalize bg-black text-white border-black">
+                <span
+                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
+"
+                >
                   {chipCategory}
                 </span>
               )}
               {[...selectedGenders].map((g) => (
                 <span
                   key={`g-${g}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black"
+                  className="px-3 h-9 rounded-full border text-sm bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
+                  "
                 >
                   {g === "female" ? "Feminino" : "Masculino"}
                 </span>
@@ -769,7 +787,8 @@ export default function Home() {
               {[...selectedSizes].map((s) => (
                 <span
                   key={`s-${s}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black"
+                  className="px-3 h-9 rounded-full border text-sm bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
+                  "
                 >
                   {s}
                 </span>
@@ -799,7 +818,7 @@ export default function Home() {
                         onClick={() => setChipCategory(c)}
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
-                            ? "bg-black text-white border-black"
+                            ? "bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
                       >
@@ -822,7 +841,7 @@ export default function Home() {
                         }
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
-                            ? "bg-black text-white border-black"
+                            ? "bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D] bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
                         aria-pressed={active}
@@ -841,7 +860,7 @@ export default function Home() {
                         onClick={() => setChipCategory(c)}
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
-                            ? "bg-black text-white border-black"
+                            ? "bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
                       >
@@ -973,7 +992,7 @@ export default function Home() {
                               }
                               className={`h-10 px-4 rounded-full border text-sm ${
                                 active
-                                  ? "bg-black text-white border-black"
+                                  ? "bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]"
                                   : "bg-white text-gray-800 border-gray-200"
                               }`}
                             >
@@ -1009,7 +1028,7 @@ export default function Home() {
                               }
                               className={`h-10 px-4 rounded-full border text-sm ${
                                 active
-                                  ? "bg-black text-white border-black"
+                                  ? "bbg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]                                  "
                                   : "bg-white text-gray-800 border-gray-200"
                               }`}
                             >
@@ -1057,7 +1076,7 @@ export default function Home() {
                               }
                               className={`h-10 px-4 rounded-full border text-sm capitalize ${
                                 active
-                                  ? "bg-black text-white border-black"
+                                  ? "bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]                                  "
                                   : "bg-white text-gray-800 border-gray-200"
                               }`}
                             >
@@ -1114,33 +1133,16 @@ export default function Home() {
               className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
             >
               <div className="relative h-44">
-                <span className="absolute right-2 top-2 rounded-full bg-[color:var(--surface-strong)] px-2 py-0.5 text-[11px] font-medium shadow border border-warm">
+                {/* PREÇO — agora no canto inferior esquerdo */}
+                <span className="absolute left-2 bottom-2 rounded-full bg-[color:var(--surface-strong)] px-2 py-0.5 text-[11px] font-medium shadow border border-warm">
                   {formatBRL(p.price_tag)}
                 </span>
+
                 <img
                   src={firstImage(p.photo_url)}
                   alt={p.name}
                   className="w-full h-44 object-cover"
                 />
-
-                <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-black/65 text-white border border-black/20 px-2 py-0.5 text-[11px] font-medium backdrop-blur-sm">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle cx="12" cy="12" r="3" strokeWidth="2" />
-                  </svg>
-                  {p.view_count ?? 0}
-                </span>
               </div>
 
               <div className="p-3">
