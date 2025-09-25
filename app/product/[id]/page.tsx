@@ -570,11 +570,16 @@ export default function ProductPage() {
           </div>
         </div>
 
-        <div className="mt-2 inline-flex items-center gap-2">
-          <span className="px-2.5 h-7 rounded-full border border-gray-200 bg-white text-xs font-medium">
-            {product.store_name}
-          </span>
-        </div>
+        <div className="mt-2">
+  <span
+    className="flex items-center w-full justify-start px-4 h-10 rounded-full border text-sm font-medium normal-case"
+    style={{ backgroundColor: "#8B5E3C", color: "#F5EEE6", borderColor: "#6F4A2D" }}
+  >
+    {product.store_name}
+  </span>
+</div>
+
+
 
         {/* Seleção de tamanho */}
         <div className="mt-5 rounded-2xl border border-gray-200 p-3.5">
@@ -597,9 +602,13 @@ export default function ProductPage() {
                 aria-pressed={size === s}
                 className={`h-10 min-w-12 px-3 rounded-full border text-sm focus:outline-none focus:ring-2 focus:ring-black/15 ${
                   size === s
-                    ? "bg-black text-white border-black"
+                    ? "text-white"
                     : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
                 }`}
+                style={size === s
+                  ? { backgroundColor: "#8B5E3C", borderColor: "#6F4A2D" }
+                  : {}}
+                
               >
                 {s}
               </button>
@@ -673,12 +682,14 @@ export default function ProductPage() {
                   Seu nome aparece como primeiro nome + inicial.
                 </span>
                 <button
-                  type="submit"
-                  disabled={posting || newComment.trim().length < 2}
-                  className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {posting ? "Enviando…" : "Publicar"}
-                </button>
+  type="submit"
+  disabled={posting || newComment.trim().length < 2}
+  className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+  style={{ backgroundColor: "#8B5E3C" }}
+>
+  {posting ? "Enviando…" : "Publicar"}
+</button>
+
               </div>
             </form>
           ) : (
@@ -702,8 +713,10 @@ export default function ProductPage() {
             onClick={handleAddToBag}
             disabled={!size}
             className={`w-full h-12 rounded-xl text-white text-sm font-semibold active:scale-[0.99] transition ${
-              size ? "bg-black" : "bg-gray-300 cursor-not-allowed"
+              size ? "" : "bg-gray-300 cursor-not-allowed"
             }`}
+            style={size ? { backgroundColor: "#8B5E3C" } : {}}
+            
           >
             Adicionar à sacola
           </button>
