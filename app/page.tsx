@@ -148,32 +148,13 @@ export default function Home() {
     () => [
       {
         title: "Moda em minutos",
-        subtitle:
-          "O primeiro delivery de moda do mundo com curadoria de excelência",
-        image:
-          "https://images.pexels.com/photos/8004290/pexels-photo-8004290.jpeg?auto=compress&cs=tinysrgb&h=800&w=1200&fit=crop ",
-        href: "/collections/sobre",
-      },
-      {
-        title: "Night out",
-        subtitle: "A noite paulistana em grande estilo",
+        subtitle: [
+          "O primeiro delivery de moda do mundo",
+          "com curadoria de excelência",
+        ],
         image:
           "https://images.unsplash.com/photo-1699109216399-7857ed548130?auto=format&fit=crop&w=1200&q=80",
-        href: "/collections/night",
-      },
-      {
-        title: "Office Looks",
-        subtitle: "Pronto para o escritório",
-        image:
-          "https://images.unsplash.com/photo-1592389902607-0c1e1d1373de?auto=format&fit=crop&w=1200&q=80",
-        href: "/collections/work",
-      },
-      {
-        title: "Sunday brunch",
-        subtitle: "Nossa seleção para o almoço",
-        image:
-          "https://images.unsplash.com/photo-1612791096690-137536c85169?auto=format&fit=crop&w=1200&q=80",
-        href: "/collections/brunch",
+        href: "/collections/sobre",
       },
     ],
     []
@@ -441,46 +422,48 @@ export default function Home() {
             <h1 className="text-[32px] leading-8 font-bold tracking-tight text-black">
   Look
 </h1>
-<p className="mt-1 text-[13px] text-gray-700">
+<p className="mt-1 text-[13px] text-black">
   Ready to wear in minutes
 </p>
+
 
           </div>
 
           {/* Botão de Login / Menu, conversando com o fundo marrom */}
           {!loading && !profile ? (
-            <Link
-              href="/auth"
-              className="mt-1 inline-flex items-center rounded-full border px-4 h-9 text-sm font-medium transition
-                   bg-white/90 text-[#3A281B] border-[#6F4A2D] shadow-[0_1px_0_rgba(0,0,0,0.06)] hover:bg-white"
-              aria-label="Login"
-              title="Login"
-            >
-              Login
-            </Link>
+          <Link
+          href="/auth"
+          className="mt-1 inline-flex items-center rounded-full border px-4 h-9 text-sm font-medium transition
+               bg-transparent text-black border-[#CBB49E] hover:bg-[#E6D5C3]/20"
+        >
+          Login
+        </Link>
+        
+         
+          
           ) : (
             <button
-              onClick={() => setDrawerOpen(true)}
-              className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border
-                   bg-white/90 text-[#3A281B] border-[#6F4A2D] shadow-[0_1px_0_rgba(0,0,0,0.06)] hover:bg-white active:scale-[0.98] transition"
-              aria-label="Menu"
-              title="Menu"
+            onClick={() => setDrawerOpen(true)}
+            className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border
+                 bg-transparent text-black border-[#CBB49E] hover:bg-[#E6D5C3]/20 active:scale-[0.98] transition"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              className="text-black"
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                className="text-[#3A281B]"
-              >
-                <path
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
+              <path
+                strokeWidth="2"
+                strokeLinecap="round"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+          
+
           )}
         </div>
       </div>
@@ -685,7 +668,10 @@ export default function Home() {
                     ? "opacity-100 pointer-events-auto"
                     : "opacity-0 pointer-events-none"
                 }`}
-                aria-label={`${b.title} — ${b.subtitle}`}
+                aria-label={`${b.title} — ${
+                  Array.isArray(b.subtitle) ? b.subtitle.join(" ") : b.subtitle
+                }`}
+                
               >
                 <div className="absolute inset-0">
                   <img
@@ -696,11 +682,22 @@ export default function Home() {
                 </div>
                 <div className="absolute inset-0 bg-gradient-to-tr from-black/50 via-black/10 to-transparent" />
                 <div className="absolute left-4 bottom-4 right-4 text-white drop-shadow">
-                  <div className="text-[22px] font-bold leading-6">
-                    {b.title}
+                <div className="text-[22px] font-bold leading-6">
+  {b.title}
+</div>
+<div className="text-[13px] opacity-90 font-semibold">
+  {Array.isArray(b.subtitle)
+    ? b.subtitle.map((line, i) => (
+        <span key={i}>
+          {line}
+          {i < b.subtitle.length - 1 && <br />}
+        </span>
+      ))
+    : b.subtitle}
+</div>
+
                   </div>
-                  <div className="text-[13px] opacity-90">{b.subtitle}</div>
-                </div>
+
               </Link>
             ))}
             <button
@@ -771,7 +768,7 @@ export default function Home() {
               {[...selectedCategories].map((c) => (
                 <span
                   key={`c-${c}`}
-                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
+                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#CBB49E] text-[#F5EEE6] border-[#6F4A2D]
                   "
                 >
                   {c}
@@ -831,7 +828,8 @@ export default function Home() {
                             ? "text-white border-[#3E2723]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
-                        style={active ? { backgroundColor: "#3E2723" } : {}}
+                        style={active ? { backgroundColor: "#8B5E3C", color: "#fff", borderColor: "#6F4A2D" } : {}}
+
                         
                       >
                         {c}
@@ -856,7 +854,9 @@ export default function Home() {
                             ? "text-white border-[#3E2723]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
-                        style={active ? { backgroundColor: "#3E2723" } : {}}
+                        style={active ? { backgroundColor: "#8B5E3C", color: "#fff", borderColor: "#6F4A2D" } : {}}
+
+
                         
                         aria-pressed={active}
                       >
@@ -877,7 +877,9 @@ export default function Home() {
                             ? "text-white border-[#3E2723]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
-                        style={active ? { backgroundColor: "#3E2723" } : {}}
+                        style={active ? { backgroundColor: "#8B5E3C", color: "#fff", borderColor: "#6F4A2D" } : {}}
+
+
                         
                       >
                         {c[0].toUpperCase() + c.slice(1)}
@@ -1119,10 +1121,11 @@ export default function Home() {
                 <button
   onClick={() => setFilterOpen(false)}
   className="w-full h-11 rounded-xl text-white text-sm font-medium"
-  style={{ backgroundColor: "#3E2723" }}
+  style={{ backgroundColor: "#8B5E3C", borderColor: "#6F4A2D" }}
 >
   Ver resultados
 </button>
+
                 </div>
               </div>
             </div>
@@ -1153,10 +1156,11 @@ export default function Home() {
                 {/* PREÇO — agora no canto inferior esquerdo */}
                 <span
   className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border"
-  style={{ backgroundColor: "#3E2723", borderColor: "#3E2723" }}
+  style={{ backgroundColor: "#8B5E3C", borderColor: "#6F4A2D" }}
 >
   {formatBRLAlpha(p.price_tag)}
 </span>
+
 
 
 
