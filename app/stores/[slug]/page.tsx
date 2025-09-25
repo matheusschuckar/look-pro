@@ -177,7 +177,7 @@ export default function StorePage() {
               {[...selectedCategories].map((c) => (
                 <span
                   key={`c-${c}`}
-                  className="px-3 h-9 rounded-full border text-sm capitalize bg-black text-white border-black"
+                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]"
                 >
                   {c}
                 </span>
@@ -185,7 +185,7 @@ export default function StorePage() {
               {[...selectedGenders].map((g) => (
                 <span
                   key={`g-${g}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black"
+                  className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
                 >
                   {g === "female" ? "Feminino" : "Masculino"}
                 </span>
@@ -193,7 +193,7 @@ export default function StorePage() {
               {[...selectedSizes].map((s) => (
                 <span
                   key={`s-${s}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black"
+                  className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
                 >
                   {s}
                 </span>
@@ -222,7 +222,7 @@ export default function StorePage() {
                         onClick={() => setSelectedCategories((s) => toggle(s, c))}
                         className={`h-9 px-3 rounded-full border text-sm capitalize ${
                           active
-                            ? "bg-black text-white border-black"
+                            ? "bg-[#141414] text-white border-[#141414]"
                             : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
                         }`}
                       >
@@ -248,7 +248,7 @@ export default function StorePage() {
                     onClick={() => setSelectedGenders((s) => toggle(s, g.id as "female" | "male"))}
                     className={`h-9 px-3 rounded-full border text-sm ${
                       active
-                        ? "bg-black text-white border-black"
+                        ? "bg-[#141414] text-white border-[#141414]"
                         : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
                     }`}
                   >
@@ -269,7 +269,7 @@ export default function StorePage() {
                     onClick={() => setSelectedSizes((set) => toggle(set, s))}
                     className={`h-9 px-3 rounded-full border text-sm ${
                       active
-                        ? "bg-black text-white border-black"
+                        ? "bg-[#141414] text-white border-[#141414]"
                         : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
                     }`}
                   >
@@ -299,7 +299,7 @@ export default function StorePage() {
                     {/* badge de preço (mantive no topo-direito, como estava) */}
                     <span
                       className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border"
-                      style={{ backgroundColor: "#8B5E3C", borderColor: "#6F4A2D" }}
+                      style={{ backgroundColor: "#141414", borderColor: "#141414" }}
                     >
                       {formatBRL(p.price_tag)}
                     </span>
