@@ -9,7 +9,7 @@ type Product = {
   id: number;
   name: string;
   store_name: string;
-  photo_url: string;
+  photo_url: string[] | string | null; // ✅ agora aceita array ou string
   eta_text: string | null;
   price_tag: number;
   category?: string | null;
@@ -26,9 +26,11 @@ function slugify(name: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+
 function formatBRL(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
+
 function toSizeList(sizes: Product["sizes"]): string[] {
   if (!sizes) return [];
   const raw = Array.isArray(sizes) ? sizes.join(",") : String(sizes);
@@ -36,6 +38,11 @@ function toSizeList(sizes: Product["sizes"]): string[] {
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);
+}
+
+// ✅ pega a primeira imagem (string ou array)
+function firstImage(x: Product["photo_url"]): string {
+  return Array.isArray(x) ? (x[0] ?? "") : (x ?? "") as string;
 }
 
 export default function StorePage() {
@@ -59,21 +66,19 @@ export default function StorePage() {
         setErr(null);
         setLoading(true);
 
-        // Busca todos os produtos ativos e depois filtra por slug de store_name no client.
-        // (Fazemos assim para não depender de acentos/variações no PostgREST)
+        // buscamos todos ativos e filtramos por slug no client (para contornar acentos)
         const { data, error } = await supabase
           .from("products")
-          .select(
-            "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes"
-          )
+          .select("id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes")
           .eq("is_active", true)
           .limit(500);
         if (error) throw error;
 
         const list = (data ?? []) as Product[];
-        const filteredByStore = list.filter((p) => slugify(String(p.store_name || "")) === slug);
+        const filteredByStore = list.filter(
+          (p) => slugify(String(p.store_name || "")) === slug
+        );
 
-        // se não veio nome por query, derive do primeiro produto
         if (!storeNameFromQuery && filteredByStore[0]?.store_name) {
           setStoreName(filteredByStore[0].store_name);
         }
@@ -90,9 +95,7 @@ export default function StorePage() {
   // derivar listas únicas para filtros
   const categoryOptions = useMemo(() => {
     const set = new Set(
-      products
-        .map((p) => (p.category || "").toLowerCase())
-        .filter(Boolean)
+      products.map((p) => (p.category || "").toLowerCase()).filter(Boolean)
     );
     return Array.from(set).sort();
   }, [products]);
@@ -100,7 +103,6 @@ export default function StorePage() {
   const sizeOptions = useMemo(() => {
     const set = new Set<string>();
     products.forEach((p) => toSizeList(p.sizes).forEach((s) => set.add(s)));
-    // limitar aos clássicos primeiro
     const order = ["PP", "P", "M", "G", "GG"];
     const rest = Array.from(set).filter((s) => !order.includes(s)).sort();
     return [...order.filter((s) => set.has(s)), ...rest];
@@ -112,17 +114,14 @@ export default function StorePage() {
   // aplicar filtros
   const shown = useMemo(() => {
     return products.filter((p) => {
-      // categorias
       if (selectedCategories.size > 0) {
         const pc = (p.category || "").toLowerCase();
         if (!pc || !selectedCategories.has(pc)) return false;
       }
-      // gênero
       if (selectedGenders.size > 0) {
         const g = (p.gender || "").toLowerCase();
         if (!g || !selectedGenders.has(g as "male" | "female")) return false;
       }
-      // tamanho
       if (selectedSizes.size > 0) {
         const list = toSizeList(p.sizes);
         if (!list.length || !list.some((s) => selectedSizes.has(s))) return false;
@@ -149,7 +148,9 @@ export default function StorePage() {
       {/* header */}
       <div className="pt-6 flex items-center justify-between">
         <div>
-          <h1 className="text-[22px] leading-6 font-bold tracking-tight">{storeName || "Loja"}</h1>
+          <h1 className="text-[22px] leading-6 font-bold tracking-tight">
+            {storeName || "Loja"}
+          </h1>
           <p className="text-[12px] text-gray-600">
             {products.length} {products.length === 1 ? "peça" : "peças"}
           </p>
@@ -174,17 +175,26 @@ export default function StorePage() {
           {anyFilterActive && (
             <div className="flex flex-wrap gap-2">
               {[...selectedCategories].map((c) => (
-                <span key={`c-${c}`} className="px-3 h-9 rounded-full border text-sm capitalize bg-black text-white border-black">
+                <span
+                  key={`c-${c}`}
+                  className="px-3 h-9 rounded-full border text-sm capitalize bg-black text-white border-black"
+                >
                   {c}
                 </span>
               ))}
               {[...selectedGenders].map((g) => (
-                <span key={`g-${g}`} className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black">
+                <span
+                  key={`g-${g}`}
+                  className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black"
+                >
                   {g === "female" ? "Feminino" : "Masculino"}
                 </span>
               ))}
               {[...selectedSizes].map((s) => (
-                <span key={`s-${s}`} className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black">
+                <span
+                  key={`s-${s}`}
+                  className="px-3 h-9 rounded-full border text-sm bg-black text-white border-black"
+                >
                   {s}
                 </span>
               ))}
@@ -235,9 +245,7 @@ export default function StorePage() {
                 return (
                   <button
                     key={g.id}
-                    onClick={() =>
-                      setSelectedGenders((s) => toggle(s, g.id as "female" | "male"))
-                    }
+                    onClick={() => setSelectedGenders((s) => toggle(s, g.id as "female" | "male"))}
                     className={`h-9 px-3 rounded-full border text-sm ${
                       active
                         ? "bg-black text-white border-black"
@@ -278,9 +286,7 @@ export default function StorePage() {
       {!loading && (
         <>
           {shown.length === 0 ? (
-            <p className="mt-6 text-sm text-gray-600">
-              Nenhuma peça com os filtros atuais.
-            </p>
+            <p className="mt-6 text-sm text-gray-600">Nenhuma peça com os filtros atuais.</p>
           ) : (
             <div className="mt-5 grid grid-cols-2 gap-4">
               {shown.map((p) => (
@@ -290,15 +296,22 @@ export default function StorePage() {
                   className="rounded-2xl bg-white shadow-md overflow-hidden hover:shadow-lg transition border border-gray-100"
                 >
                   <div className="relative">
-                    <span className="absolute right-2 top-2 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[11px] font-medium shadow border border-gray-200">
+                    {/* badge de preço (mantive no topo-direito, como estava) */}
+                    <span
+                      className="absolute right-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border"
+                      style={{ backgroundColor: "#8B5E3C", borderColor: "#6F4A2D" }}
+                    >
                       {formatBRL(p.price_tag)}
                     </span>
+
+                    {/* ✅ usa a primeira imagem */}
                     <img
-                      src={p.photo_url}
+                      src={firstImage(p.photo_url)}
                       alt={p.name}
                       className="w-full h-44 object-cover"
                     />
                   </div>
+
                   <div className="p-3">
                     {p.category ? (
                       <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
