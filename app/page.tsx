@@ -98,7 +98,6 @@ function formatBRLAlpha(v: number) {
   return `BRL ${v.toFixed(2).replace(".", ",")}`;
 }
 
-
 function firstImage(x: string[] | string | null | undefined) {
   return Array.isArray(x) ? x[0] ?? "" : x ?? "";
 }
@@ -413,57 +412,47 @@ export default function Home() {
       {/* Header com faixa marrom (refinado) */}
       <div className="-mx-5 px-5 relative z-0 mb-7">
         {/* Fundo marrom, com canto inferior arredondado e um pouco mais alto */}
-        
 
         {/* Conteúdo do header sobre o fundo */}
         <div className="relative z-10 pt-6 flex items-start justify-between">
           <div>
             {/* Título em tom claro e elegante */}
             <h1 className="text-[32px] leading-8 font-bold tracking-tight text-black">
-  Look
-</h1>
-<p className="mt-1 text-[13px] text-black">
-  Ready to wear in minutes
-</p>
-
-
+              Look
+            </h1>
+            <p className="mt-1 text-[13px] text-black">
+              Ready to wear in minutes
+            </p>
           </div>
 
           {/* Botão de Login / Menu, conversando com o fundo marrom */}
           {!loading && !profile ? (
-          <Link
-          href="/auth"
-          className="mt-1 inline-flex items-center rounded-full border px-4 h-9 text-sm font-medium transition
-               bg-transparent text-black border-[#CBB49E] hover:bg-[#E6D5C3]/20"
-        >
-          Login
-        </Link>
-        
-         
-          
+            <Link
+              href="/auth"
+              className="mt-1 inline-flex items-center rounded-full border px-4 h-9 text-sm font-medium transition bg-transparent text-[#141414] border-[#141414] hover:bg-[#141414]/10"
+            >
+              Login
+            </Link>
           ) : (
             <button
-            onClick={() => setDrawerOpen(true)}
-            className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border
-                 bg-transparent text-black border-[#CBB49E] hover:bg-[#E6D5C3]/20 active:scale-[0.98] transition"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              className="text-black"
+              onClick={() => setDrawerOpen(true)}
+              className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border bg-transparent text-[#141414] border-[#141414] hover:bg-[#141414]/10 active:scale-[0.98] transition"
             >
-              <path
-                strokeWidth="2"
-                strokeLinecap="round"
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
-          
-
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                className="text-black"
+              >
+                <path
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
           )}
         </div>
       </div>
@@ -475,12 +464,12 @@ export default function Home() {
             className="absolute inset-0 bg-black/30"
             onClick={() => setDrawerOpen(false)}
           />
-          <div className="absolute right-0 top-0 bottom-0 w-72 surface-strong shadow-xl flex flex-col">
-            <div className="flex items-center justify-between px-4 h-14 border-b border-warm">
+          <div className="absolute right-0 top-0 bottom-0 w-72 shadow-xl flex flex-col bg-[#141414] text-white">
+            <div className="flex items-center justify-between px-4 h-14 border-b border-white/10">
               <span className="font-semibold">Menu</span>
               <button
                 onClick={() => setDrawerOpen(false)}
-                className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-[color:var(--chip)]"
+                className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-white/10"
                 aria-label="Fechar"
                 title="Fechar"
               >
@@ -511,7 +500,7 @@ export default function Home() {
                 </li>
               </ul>
             </nav>
-            <div className="border-t p-4">
+            <div className="border-t p-4 border-white/10">
               <button
                 onClick={handleLogout}
                 className="w-full text-left text-red-600 hover:underline"
@@ -671,7 +660,6 @@ export default function Home() {
                 aria-label={`${b.title} — ${
                   Array.isArray(b.subtitle) ? b.subtitle.join(" ") : b.subtitle
                 }`}
-                
               >
                 <div className="absolute inset-0">
                   <img
@@ -682,22 +670,20 @@ export default function Home() {
                 </div>
                 <div className="absolute inset-0 bg-gradient-to-tr from-black/50 via-black/10 to-transparent" />
                 <div className="absolute left-4 bottom-4 right-4 text-white drop-shadow">
-                <div className="text-[22px] font-bold leading-6">
-  {b.title}
-</div>
-<div className="text-[13px] opacity-90 font-semibold">
-  {Array.isArray(b.subtitle)
-    ? b.subtitle.map((line, i) => (
-        <span key={i}>
-          {line}
-          {i < b.subtitle.length - 1 && <br />}
-        </span>
-      ))
-    : b.subtitle}
-</div>
-
+                  <div className="text-[22px] font-bold leading-6">
+                    {b.title}
                   </div>
-
+                  <div className="text-[13px] opacity-90 font-semibold">
+                    {Array.isArray(b.subtitle)
+                      ? b.subtitle.map((line, i) => (
+                          <span key={i}>
+                            {line}
+                            {i < b.subtitle.length - 1 && <br />}
+                          </span>
+                        ))
+                      : b.subtitle}
+                  </div>
+                </div>
               </Link>
             ))}
             <button
@@ -768,25 +754,20 @@ export default function Home() {
               {[...selectedCategories].map((c) => (
                 <span
                   key={`c-${c}`}
-                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#CBB49E] text-[#F5EEE6] border-[#6F4A2D]
-                  "
+                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]"
                 >
                   {c}
                 </span>
               ))}
               {selectedCategories.size === 0 && chipCategory !== "Tudo" && (
-                <span
-                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
-"
-                >
+                <span className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]">
                   {chipCategory}
                 </span>
               )}
               {[...selectedGenders].map((g) => (
                 <span
                   key={`g-${g}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
-                  "
+                  className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
                 >
                   {g === "female" ? "Feminino" : "Masculino"}
                 </span>
@@ -794,8 +775,7 @@ export default function Home() {
               {[...selectedSizes].map((s) => (
                 <span
                   key={`s-${s}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]
-                  "
+                  className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
                 >
                   {s}
                 </span>
@@ -825,12 +805,9 @@ export default function Home() {
                         onClick={() => setChipCategory(c)}
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
-                            ? "text-white border-[#3E2723]"
+                            ? "text-white bg-[#141414] border-[#141414]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
-                        style={active ? { backgroundColor: "#8B5E3C", color: "#fff", borderColor: "#6F4A2D" } : {}}
-
-                        
                       >
                         {c}
                       </button>
@@ -851,13 +828,9 @@ export default function Home() {
                         }
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
-                            ? "text-white border-[#3E2723]"
+                            ? "text-white bg-[#141414] border-[#141414]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
-                        style={active ? { backgroundColor: "#8B5E3C", color: "#fff", borderColor: "#6F4A2D" } : {}}
-
-
-                        
                         aria-pressed={active}
                       >
                         {g.label}
@@ -874,13 +847,9 @@ export default function Home() {
                         onClick={() => setChipCategory(c)}
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
-                            ? "text-white border-[#3E2723]"
+                            ? "text-white bg-[#141414] border-[#141414]"
                             : "surface border-warm text-gray-800 hover:opacity-95"
                         }`}
-                        style={active ? { backgroundColor: "#8B5E3C", color: "#fff", borderColor: "#6F4A2D" } : {}}
-
-
-                        
                       >
                         {c[0].toUpperCase() + c.slice(1)}
                       </button>
@@ -892,7 +861,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setFilterOpen(true)}
-                className="ml-2 inline-flex items-center gap-1 h-9 px-3 rounded-full border border-warm chip text-sm hover:opacity-95"
+                className="ml-2 inline-flex items-center gap-1 h-9 px-3 rounded-full border text-sm border-[#141414] text-[#141414] hover:bg-[#141414]/10"
               >
                 <svg
                   width="16"
@@ -976,7 +945,7 @@ export default function Home() {
                           aria-selected={activeTab === t.id}
                           className={`pb-3 -mb-px ${
                             activeTab === t.id
-                              ? "text-black border-b-2 border-black"
+                              ? "text-[#141414] border-b-2 border-[#141414]"
                               : "text-gray-500"
                           }`}
                         >
@@ -1010,7 +979,7 @@ export default function Home() {
                               }
                               className={`h-10 px-4 rounded-full border text-sm ${
                                 active
-                                  ? "bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]"
+                                  ? "bg-[#141414] text-white border-[#141414]"
                                   : "bg-white text-gray-800 border-gray-200"
                               }`}
                             >
@@ -1094,7 +1063,7 @@ export default function Home() {
                               }
                               className={`h-10 px-4 rounded-full border text-sm capitalize ${
                                 active
-                                  ? "bg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]                                  "
+                                  ? "bg-[#141414] text-white border-[#141414]"
                                   : "bg-white text-gray-800 border-gray-200"
                               }`}
                             >
@@ -1118,14 +1087,12 @@ export default function Home() {
 
                 {/* footer */}
                 <div className="sticky bottom-0 bg-white border-t px-5 py-3">
-                <button
-  onClick={() => setFilterOpen(false)}
-  className="w-full h-11 rounded-xl text-white text-sm font-medium"
-  style={{ backgroundColor: "#8B5E3C", borderColor: "#6F4A2D" }}
->
-  Ver resultados
-</button>
-
+                  <button
+                    onClick={() => setFilterOpen(false)}
+                    className="w-full h-11 rounded-xl text-white text-sm font-medium bg-[#141414]"
+                  >
+                    Ver resultados
+                  </button>
                 </div>
               </div>
             </div>
@@ -1135,7 +1102,7 @@ export default function Home() {
 
       {/* Grid de produtos — liberado para todos */}
       {!loading && (
-        <div className="mt-5 grid grid-cols-2 gap-4 pb=6">
+        <div className="mt-5 grid grid-cols-2 gap-4 pb-6">
           {filteredRanked.map((p) => (
             <Link
               key={p.id}
@@ -1154,15 +1121,9 @@ export default function Home() {
             >
               <div className="relative h-44">
                 {/* PREÇO — agora no canto inferior esquerdo */}
-                <span
-  className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border"
-  style={{ backgroundColor: "#8B5E3C", borderColor: "#6F4A2D" }}
->
-  {formatBRLAlpha(p.price_tag)}
-</span>
-
-
-
+                <span className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border bg-[#141414] border-[#141414]">
+                  {formatBRLAlpha(p.price_tag)}
+                </span>
 
                 <img
                   src={firstImage(p.photo_url)}
