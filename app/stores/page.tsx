@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 type StoreCard = {
@@ -19,11 +19,6 @@ function slugify(name: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("");
-}
-
 export default function StoresPage() {
   const [stores, setStores] = useState<StoreCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +27,6 @@ export default function StoresPage() {
   useEffect(() => {
     (async () => {
       try {
-        // pega todos os store_name distintos dos produtos ativos
         const { data, error } = await supabase
           .from("products")
           .select("store_name")
@@ -60,13 +54,15 @@ export default function StoresPage() {
 
   return (
     <main className="bg-white text-black max-w-md mx-auto min-h-[100dvh] px-5 pb-28">
+      {/* Header */}
       <div className="pt-6 flex items-center justify-between">
         <h1 className="text-[28px] leading-7 font-bold tracking-tight">
-          Stores
+          Lojas
         </h1>
         <Link
           href="/"
-          className="inline-flex h-9 items-center gap-2 rounded-full border border-gray-200 bg-white px-3 text-sm hover:bg-gray-50"
+          className="inline-flex h-9 items-center gap-2 rounded-full border px-3 text-sm transition
+                     bg-transparent text-black border-[#CBB49E] hover:bg-[#E6D5C3]/20"
         >
           <svg
             width="16"
@@ -86,30 +82,52 @@ export default function StoresPage() {
         </Link>
       </div>
 
+      {/* Estados */}
       {err && <p className="mt-4 text-sm text-red-600">Erro: {err}</p>}
       {loading && <p className="mt-4 text-sm text-gray-600">Carregando…</p>}
-
       {!loading && stores.length === 0 && (
         <p className="mt-8 text-sm text-gray-600">Nenhuma loja encontrada.</p>
       )}
 
+      {/* Grid de lojas */}
       <div className="mt-5 grid grid-cols-2 gap-4">
         {stores.map((s) => (
           <Link
             key={s.slug}
             href={`/stores/${s.slug}?n=${encodeURIComponent(s.name)}`}
-            className="group rounded-2xl border border-gray-200 bg-white h-28 shadow-sm hover:shadow transition overflow-hidden flex items-center justify-center"
             title={s.name}
+            className="group rounded-2xl border h-28 transition
+                       bg-[#8B5E3C] border-[#6F4A2D]
+                       hover:shadow-md hover:-translate-y-0.5 flex items-center justify-center px-3"
           >
-            {/* “logo” placeholder com iniciais */}
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-              <div className="text-center">
-                <div className="text-2xl font-bold tracking-wide">
-                  {initials(s.name)}
-                </div>
-                <div className="mt-1 text-[11px] text-gray-600 line-clamp-1 px-3">
-                  {s.name}
-                </div>
+            <div className="text-center text-white">
+              <div className="text-[15px] font-semibold line-clamp-2">
+                {s.name}
+              </div>
+              <div
+                className="mt-2 inline-flex items-center gap-1 px-3 h-7 rounded-full border text-[11px] font-medium transition"
+                style={{
+                  backgroundColor: "transparent",
+                  borderColor: "white",
+                  color: "white",
+                }}
+              >
+                Ver peças
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  style={{ stroke: "white" }}
+                >
+                  <path
+                    d="M9 18l6-6-6-6"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </div>
             </div>
           </Link>
