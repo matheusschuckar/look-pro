@@ -149,10 +149,10 @@ export default function Home() {
         title: "Moda em minutos",
         subtitle: [
           "O primeiro delivery de moda do mundo",
-          "com curadoria de excelência",
+          "com curadoria de excelência e entrega rápida",
         ],
         image:
-          "https://images.unsplash.com/photo-1699109216399-7857ed548130?auto=format&fit=crop&w=1200&q=80",
+          "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Untitled%20design-10.png",
         href: "/collections/sobre",
       },
     ],
