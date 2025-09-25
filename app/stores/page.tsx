@@ -62,7 +62,7 @@ export default function StoresPage() {
         <Link
           href="/"
           className="inline-flex h-9 items-center gap-2 rounded-full border px-3 text-sm transition
-                     bg-transparent text-black border-[#CBB49E] hover:bg-[#E6D5C3]/20"
+                     bg-transparent text-[#141414] border-[#141414] hover:bg-[#141414]/10"
         >
           <svg
             width="16"
@@ -97,7 +97,7 @@ export default function StoresPage() {
             href={`/stores/${s.slug}?n=${encodeURIComponent(s.name)}`}
             title={s.name}
             className="group rounded-2xl border h-28 transition
-                       bg-[#8B5E3C] border-[#6F4A2D]
+                       bg-[#141414] border-[#141414]
                        hover:shadow-md hover:-translate-y-0.5 flex items-center justify-center px-3"
           >
             <div className="text-center text-white">
