@@ -3,6 +3,7 @@
 import Link from "next/link";
 // import Image from "next/image"; // descomentaria se for usar <Image />
 import { useEffect, useMemo, useRef, useState } from "react";
+import type React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import BottomNav from "../components/BottomNav";
@@ -402,6 +403,90 @@ export default function Home() {
       router.replace("/");
     }
   }
+  // ===== Helpers para intercalar produtos e banners =====
+
+  // imagens/links dos banners do feed — troque as URLs quando quiser
+  const inlineBanners = {
+    editorialTall: {
+      href: "/collections/editorial",
+      image:
+        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/NEW%20IN%20LOUIS%20VUITTON.png", // TROCAR
+      alt: "Editorial da marca",
+    },
+    selectionHero: {
+      href: "/collections/fasano",
+      image:
+        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Untitled%20(448%20x%20448%20px)-4.png",
+        alt: "selecao fasano"
+    },
+    landscapeTriplet: [
+      {
+        href: "/collections/nova-colecao",
+        image: "https://via.placeholder.com/800x200?text=Banner+1", // TROCAR
+        alt: "Nova coleção",
+      },
+      {
+        href: "/collections/occasions",
+        image: "https://via.placeholder.com/800x200?text=Banner+2", // TROCAR
+        alt: "Ocasiões",
+      },
+      {
+        href: "/collections/essentials",
+        image: "https://via.placeholder.com/800x200?text=Banner+3", // TROCAR
+        alt: "Essenciais",
+      },
+    ],
+  } as const;
+
+  // card de produto reaproveitando seu JSX atual
+  function ProductCard({ p }: { p: Product }) {
+    return (
+      <Link
+        href={`/product/${p.id}`}
+        onClick={() => {
+          bumpCategory(p.category || "");
+          bumpStore(p.store_name || "");
+          setViews((prev) => {
+            const next = { ...prev };
+            const k = String(p.id);
+            next[k] = (next[k] || 0) + 1;
+            return next;
+          });
+        }}
+        className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
+      >
+        <div className="relative h-44">
+          <span className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border bg-[#141414] border-[#141414]">
+            {formatBRLAlpha(p.price_tag)}
+          </span>
+          <img
+            src={firstImage(p.photo_url)}
+            alt={p.name}
+            className="w-full h-44 object-cover"
+            loading="lazy"
+            decoding="async"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = "/fallback.jpg";
+            }}
+          />
+        </div>
+
+        <div className="p-3">
+          {p.category ? (
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
+              {p.category}
+            </p>
+          ) : null}
+          <p className="text-sm font-semibold leading-tight line-clamp-2">
+            {p.name}
+          </p>
+          <p className="text-xs text-gray-500">{p.store_name}</p>
+          <p className="text-xs text-gray-400">{p.eta_text ?? "até 1h"}</p>
+        </div>
+      </Link>
+    );
+  }
+  // ===== fim dos helpers =====
 
   // Render
   return (
@@ -1015,7 +1100,7 @@ export default function Home() {
                               }
                               className={`h-10 px-4 rounded-full border text-sm ${
                                 active
-                                  ? "bbg-[#8B5E3C] text-[#F5EEE6] border-[#6F4A2D]                                  "
+                                  ? "bg-[#141414] text-white border-[#141414]"
                                   : "bg-white text-gray-800 border-gray-200"
                               }`}
                             >
@@ -1100,62 +1185,115 @@ export default function Home() {
         </>
       )}
 
-      {/* Grid de produtos — liberado para todos */}
+      {/* Grid de produtos — com banners intercalados */}
       {!loading && (
         <div className="mt-5 grid grid-cols-2 gap-4 pb-6">
-          {filteredRanked.map((p) => (
-            <Link
-              key={p.id}
-              href={`/product/${p.id}`}
-              onClick={() => {
-                bumpCategory(p.category);
-                bumpStore(p.store_name);
-                setViews((prev) => {
-                  const next = { ...prev };
-                  const k = String(p.id);
-                  next[k] = (next[k] || 0) + 1;
-                  return next;
-                });
-              }}
-              className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
-            >
-              <div className="relative h-44">
-                {/* PREÇO — agora no canto inferior esquerdo */}
-                <span className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border bg-[#141414] border-[#141414]">
-                  {formatBRLAlpha(p.price_tag)}
-                </span>
+          {(() => {
+            const items: React.ReactNode[] = [];
+            const list = filteredRanked;
+            let i = 0;
 
+            // helper para empurrar N produtos
+            const pushProducts = (count: number) => {
+              for (let k = 0; k < count && i < list.length; k++, i++) {
+                items.push(<ProductCard key={`p-${list[i].id}`} p={list[i]} />);
+              }
+            };
+
+            // 1) 2 linhas x 2 colunas = 4 produtos
+            pushProducts(4);
+
+            // 2) banner retangular com altura maior (editorial), largura total
+            items.push(
+              <Link
+                key="banner-editorialTall"
+                href={inlineBanners.editorialTall.href}
+                className="col-span-2 rounded-3xl overflow-hidden relative"
+                aria-label={inlineBanners.editorialTall.alt}
+              >
                 <img
-                  src={firstImage(p.photo_url)}
-                  alt={p.name}
-                  className="w-full h-44 object-cover"
+                  src={inlineBanners.editorialTall.image}
+                  alt={inlineBanners.editorialTall.alt}
+                  className="w-full h-[560px] object-cover object-center"
+                  loading="lazy"
+                  decoding="async"
                 />
-              </div>
+              </Link>
+            );
 
-              <div className="p-3">
-                {p.category ? (
-                  <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
-                    {p.category}
-                  </p>
-                ) : null}
-                <p className="text-sm font-semibold leading-tight line-clamp-2">
-                  {p.name}
-                </p>
-                <p className="text-xs text-gray-500">{p.store_name}</p>
-                <p className="text-xs text-gray-400">
-                  {p.eta_text ?? "até 1h"}
-                </p>
-              </div>
-            </Link>
-          ))}
+            // 3) mais 4 produtos
+            pushProducts(4);
 
-          {filteredRanked.length === 0 && (
-            <p className="col-span-2 mt-4 text-sm text-gray-600">
-              Nenhum produto encontrado com os filtros atuais.
-            </p>
-          )}
+            // 4) banner Fasano (quadrado, sem corte e com borda igual aos demais)
+items.push(
+  <Link
+    key="banner-selectionHero"
+    href={inlineBanners.selectionHero.href}
+    className="col-span-2 rounded-3xl overflow-hidden relative aspect-square bg-white"
+    aria-label={inlineBanners.selectionHero.alt}
+  >
+    {/* imagem inteira, sem corte */}
+    <img
+      src={inlineBanners.selectionHero.image}
+      alt={inlineBanners.selectionHero.alt}
+      className="absolute inset-0 w-full h-full object-contain"
+      loading="lazy"
+      decoding="async"
+    />
+  </Link>
+);
+
+
+
+
+            // 5) mais 4 produtos
+            pushProducts(4);
+
+            // 6) três banners baixos, landscape, na mesma linha
+            items.push(
+              <div
+                key="banner-triplet"
+                className="col-span-2 grid grid-cols-3 gap-3"
+              >
+                {inlineBanners.landscapeTriplet.map((b, idx) => (
+                  <Link
+                    key={`land-${idx}`}
+                    href={b.href}
+                    className="rounded-2xl overflow-hidden relative"
+                    aria-label={b.alt}
+                  >
+                    <img
+                      src={b.image}
+                      alt={b.alt}
+                      className="w-full h-28 object-cover object-center"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </Link>
+                ))}
+              </div>
+            );
+
+            // 7) segue com os produtos restantes
+            pushProducts(Number.MAX_SAFE_INTEGER);
+
+            // fallback se nenhum produto
+            if (items.length === 0) {
+              items.push(
+                <p
+                  key="empty"
+                  className="col-span-2 mt-4 text-sm text-gray-600"
+                >
+                  Nenhum produto encontrado com os filtros atuais.
+                </p>
+              );
+            }
+
+            return items;
+          })()}
         </div>
       )}
+
       {/* 👇 Spacer para dar um respiro acima da bottom nav */}
       <div className="h-4" />
     </main>
