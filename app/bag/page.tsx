@@ -325,39 +325,55 @@ function BagPageInner() {
                       <p className="text-xs text-gray-600">{it.store_name}</p>
                       <p className="text-xs text-gray-600">Size: {it.size}</p>
                       <div className="mt-1 flex items-center gap-2">
-                        <label className="text-xs text-gray-600">Qtd</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={it.qty}
-                          onChange={(e) =>
-                            setItems(updateQty(i, Number(e.target.value)))
-                          }
-                          className="w-16 rounded-md border px-2 py-1 text-sm"
-                        />
-                       <button
-  onClick={() => setItems(removeFromBag(i))}
-  className="ml-auto inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[11px] text-gray-700 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.98] transition"
-  aria-label={`Remover ${it.name} da sacola`}
-  title="Remover"
->
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    className="opacity-70"
-  >
-    <path d="M3 6h18" strokeWidth="2" strokeLinecap="round" />
-    <path d="M8 6V4h8v2" strokeWidth="2" strokeLinecap="round" />
-    <path d="M19 6l-1 14H6L5 6" strokeWidth="2" strokeLinecap="round" />
-    <path d="M10 11v6M14 11v6" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-  Remover
-</button>
+  <span className="text-xs text-gray-600">Qtd</span>
 
-                      </div>
+  {/* Quantidade: – [n] + */}
+  <div className="inline-flex items-center rounded-full border border-gray-200 overflow-hidden">
+    <button
+      type="button"
+      onClick={() => setItems(updateQty(i, Math.max(1, it.qty - 1)))}
+      className="h-8 w-8 text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition"
+      aria-label="Diminuir quantidade"
+    >
+      –
+    </button>
+    <div className="w-8 text-center text-sm font-medium tabular-nums select-none">
+      {it.qty}
+    </div>
+    <button
+      type="button"
+      onClick={() => setItems(updateQty(i, it.qty + 1))}
+      className="h-8 w-8 text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition"
+      aria-label="Aumentar quantidade"
+    >
+      +
+    </button>
+  </div>
+
+  {/* botão Remover (ver #2) */}
+  <button
+    onClick={() => setItems(removeFromBag(i))}
+    className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.98] shadow-sm transition"
+    aria-label={`Remover ${it.name} da sacola`}
+    title="Remover"
+  >
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      className="text-gray-700"
+    >
+      <path d="M3 6h18" strokeWidth="2" strokeLinecap="round" />
+      <path d="M8 6V4h8v2" strokeWidth="2" strokeLinecap="round" />
+      <path d="M19 6l-1 14H6L5 6" strokeWidth="2" strokeLinecap="round" />
+      <path d="M10 11v6M14 11v6" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+    Remover
+  </button>
+</div>
+
                     </div>
                     <div className="text-sm font-semibold">
                       R$ {(it.unit_price * it.qty).toFixed(2)}
