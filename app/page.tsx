@@ -30,6 +30,7 @@ type Product = {
   gender?: "male" | "female" | null;
   sizes?: string | string[] | null;
   view_count?: number;
+  categories?: string[] | null; // 👈 NOVO
 };
 
 type Profile = {
@@ -102,6 +103,15 @@ function formatBRLAlpha(v: number) {
 function firstImage(x: string[] | string | null | undefined) {
   return Array.isArray(x) ? x[0] ?? "" : x ?? "";
 }
+
+// 👇 Une category (string) + categories (array) e retorna sempre em minúsculas, sem duplicatas
+function categoriesOf(p: Product): string[] {
+  const one = (p.category || "").trim().toLowerCase();
+  const many = (p.categories || []).map((c) => (c || "").trim().toLowerCase());
+  const all = (one ? [one] : []).concat(many);
+  return Array.from(new Set(all.filter(Boolean)));
+}
+
 
 export default function Home() {
   const router = useRouter();
@@ -205,8 +215,8 @@ export default function Home() {
           const { data, error } = await supabase
             .from("products")
             .select(
-              "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count"
-            )
+              "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count,categories"
+            )            
             .eq("is_active", true)
             .limit(60);
           if (error) throw error;
@@ -240,7 +250,7 @@ export default function Home() {
           const { data, error } = await supabase
             .from("products")
             .select(
-              "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count"
+              "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count,categories"
             )
             .eq("is_active", true)
             .limit(60);
@@ -258,18 +268,19 @@ export default function Home() {
   }, []);
 
   // Filtros
-  const chipCategories = [
-    "Tudo",
-    "camiseta",
-    "camisa",
-    "vestido",
-    "saia",
-    "calça",
-    "sapato",
-    "bolsa",
-    "jaqueta",
-  ];
-  const allCategories = chipCategories.filter((c) => c !== "Tudo");
+  // Deriva categorias dinamicamente dos produtos (category + categories[])
+const dynamicCategories = useMemo(() => {
+  const set = new Set<string>();
+  for (const p of products) categoriesOf(p).forEach((c) => set.add(c));
+  return Array.from(set).sort();
+}, [products]);
+
+const chipCategories = useMemo(
+  () => ["Tudo", ...dynamicCategories],
+  [dynamicCategories]
+);
+const allCategories = dynamicCategories; // compat com o restante do código
+
   const [chipCategory, setChipCategory] = useState<string>("Tudo");
 
   const [activeTab, setActiveTab] = useState<
@@ -314,21 +325,26 @@ export default function Home() {
     return products.filter((p) => {
       // texto
       if (q) {
-        const matchText =
-          p.name.toLowerCase().includes(q) ||
-          p.store_name.toLowerCase().includes(q) ||
-          (p.category || "").toLowerCase().includes(q);
+        const cats = categoriesOf(p);
+const matchText =
+  p.name.toLowerCase().includes(q) ||
+  p.store_name.toLowerCase().includes(q) ||
+  cats.some((c) => c.includes(q));
+
         if (!matchText) return false;
       }
 
       // categorias (modal > chip)
-      if (selectedCategories.size > 0) {
-        const pc = (p.category || "").toLowerCase();
-        if (!pc || !selectedCategories.has(pc)) return false;
-      } else if (chipCategory !== "Tudo") {
-        const pc = (p.category || "").toLowerCase();
-        if (pc !== chipCategory.toLowerCase()) return false;
-      }
+      const cats = categoriesOf(p);
+
+if (selectedCategories.size > 0) {
+  // ao menos uma das selecionadas precisa estar nas categorias do produto
+  const hit = cats.some((c) => selectedCategories.has(c));
+  if (!hit) return false;
+} else if (chipCategory !== "Tudo") {
+  if (!cats.includes(chipCategory.toLowerCase())) return false;
+}
+
 
       // gênero
       if (selectedGenders.size > 0) {
@@ -444,19 +460,20 @@ export default function Home() {
   function ProductCard({ p }: { p: Product }) {
     return (
       <Link
-        href={`/product/${p.id}`}
-        onClick={() => {
-          bumpCategory(p.category || "");
-          bumpStore(p.store_name || "");
-          setViews((prev) => {
-            const next = { ...prev };
-            const k = String(p.id);
-            next[k] = (next[k] || 0) + 1;
-            return next;
-          });
-        }}
-        className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
-      >
+  href={`/product/${p.id}`}
+  onClick={() => {
+    const mainCat = categoriesOf(p)[0] || "";
+    bumpCategory(mainCat);
+    bumpStore(p.store_name || "");
+    setViews((prev) => {
+      const next = { ...prev };
+      const k = String(p.id);
+      next[k] = (next[k] || 0) + 1;
+      return next;
+    });
+  }}
+  className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
+>
         <div className="relative h-44">
           <span className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border bg-[#141414] border-[#141414]">
             {formatBRLAlpha(p.price_tag)}
@@ -474,11 +491,15 @@ export default function Home() {
         </div>
 
         <div className="p-3">
-          {p.category ? (
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
-              {p.category}
-            </p>
-          ) : null}
+        {(() => {
+  const mainCat = categoriesOf(p)[0];
+  return mainCat ? (
+    <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
+      {mainCat}
+    </p>
+  ) : null;
+})()}
+
           <p className="text-sm font-semibold leading-tight line-clamp-2">
             {p.name}
           </p>
@@ -1110,16 +1131,8 @@ export default function Home() {
                         Marque quantas quiser
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {[
-                          "camiseta",
-                          "camisa",
-                          "vestido",
-                          "saia",
-                          "calça",
-                          "sapato",
-                          "bolsa",
-                          "jaqueta",
-                        ].map((c) => {
+                      {allCategories.map((c) => {
+
                           const key = c.toLowerCase();
                           const active = selectedCategories.has(key);
                           return (
