@@ -153,7 +153,7 @@ export default function Home() {
           "com curadoria de excelência e entrega rápida",
         ],
         image:
-          "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Untitled%20design-10.png",
+        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Brunello-Cucinelli-Portofino-Summer-2023-Couples-Outfits.jpg",
         href: "/collections/sobre",
       },
     ],
@@ -161,12 +161,14 @@ export default function Home() {
   );
   const [currentBanner, setCurrentBanner] = useState(0);
   useEffect(() => {
+    if (banners.length <= 1) return; // 👈 evita autoplay com 1 banner
     const id = setInterval(
       () => setCurrentBanner((p) => (p + 1) % banners.length),
       5500
     );
     return () => clearInterval(id);
   }, [banners.length]);
+  
 
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
@@ -728,7 +730,7 @@ export default function Home() {
       {!loading && (
         <div className="mt-4 overflow-hidden rounded-3xl relative">
           <div
-            className="relative h-48 w-full"
+            className="relative h-60 w-full"
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
@@ -771,53 +773,35 @@ export default function Home() {
                 </div>
               </Link>
             ))}
-            <button
-              type="button"
-              aria-label="Anterior"
-              onClick={() =>
-                setCurrentBanner(
-                  (p) => (p - 1 + banners.length) % banners.length
-                )
-              }
-              className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <path
-                  d="M15 18l-6-6 6-6"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              aria-label="Próximo"
-              onClick={() => setCurrentBanner((p) => (p + 1) % banners.length)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <path
-                  d="M9 18l6-6-6-6"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-            <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+            {banners.length > 1 && (
+  <button
+    type="button"
+    aria-label="Anterior"
+    onClick={() =>
+      setCurrentBanner(
+        (p) => (p - 1 + banners.length) % banners.length
+      )
+    }
+    className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
+  >
+    ...
+  </button>
+)}
+
+{banners.length > 1 && (
+  <button
+    type="button"
+    aria-label="Próximo"
+    onClick={() => setCurrentBanner((p) => (p + 1) % banners.length)}
+    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
+  >
+    ...
+  </button>
+)}
+
+<div
+  className={`absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 ${banners.length <= 1 ? "hidden" : ""}`}
+>
               {banners.map((_, i) => (
                 <span
                   key={i}
