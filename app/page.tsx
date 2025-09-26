@@ -410,7 +410,7 @@ export default function Home() {
     editorialTall: {
       href: "/collections/editorial",
       image:
-        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/NEW%20IN%20LOUIS%20VUITTON.png", // TROCAR
+        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/NEW%20IN%20LOUIS%20VUITTON-3.png", // TROCAR
       alt: "Editorial da marca",
     },
     selectionHero: {
