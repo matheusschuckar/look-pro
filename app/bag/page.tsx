@@ -335,12 +335,28 @@ function BagPageInner() {
                           }
                           className="w-16 rounded-md border px-2 py-1 text-sm"
                         />
-                        <button
-                          onClick={() => setItems(removeFromBag(i))}
-                          className="ml-auto text-xs text-red-600 underline"
-                        >
-                          remover
-                        </button>
+                       <button
+  onClick={() => setItems(removeFromBag(i))}
+  className="ml-auto inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-[11px] text-gray-700 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.98] transition"
+  aria-label={`Remover ${it.name} da sacola`}
+  title="Remover"
+>
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    className="opacity-70"
+  >
+    <path d="M3 6h18" strokeWidth="2" strokeLinecap="round" />
+    <path d="M8 6V4h8v2" strokeWidth="2" strokeLinecap="round" />
+    <path d="M19 6l-1 14H6L5 6" strokeWidth="2" strokeLinecap="round" />
+    <path d="M10 11v6M14 11v6" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+  Remover
+</button>
+
                       </div>
                     </div>
                     <div className="text-sm font-semibold">
