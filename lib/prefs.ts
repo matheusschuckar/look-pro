@@ -93,7 +93,12 @@ function maybeMigrateV1(): PrefsV2 {
 }
 
 function saveV2(p: PrefsV2) {
-  localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(p));
+  try {
+    if (typeof window === "undefined") return; // SSR: não há localStorage
+    window.localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(p));
+  } catch {
+    // se o storage estiver indisponível (ex.: privacy mode), apenas ignore
+  }
 }
 
 function decayAllFeature(map: BucketMap, halfLifeDays = DEFAULT_HALF_LIFE_DAYS) {
