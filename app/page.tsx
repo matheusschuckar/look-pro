@@ -24,14 +24,24 @@ type Product = {
   name: string;
   store_name: string;
   photo_url: string[] | string | null;
-  eta_text: string | null;
   price_tag: number;
+
+  // campos opcionais (vêm quando lermos a VIEW)
+  eta_text_runtime?: string | null;
+  store_id?: number | null;
+  store_slug?: string | null;
+
+  // legado (vêm quando lermos a tabela antiga)
+  eta_text?: string | null;
+
+  // o resto pode continuar opcional
   category?: string | null;
   gender?: "male" | "female" | null;
   sizes?: string | string[] | null;
   view_count?: number;
-  categories?: string[] | null; // 👈 NOVO
+  categories?: string[] | null;
 };
+
 
 type Profile = {
   id: string;
@@ -44,6 +54,21 @@ type Profile = {
   state?: string | null;
   cep: string | null;
   status: "waitlist" | "approved";
+};
+
+type Store = {
+  id: string;
+  name: string;
+  street: string | null;
+  number: string | null;
+  complement: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  cep: string | null;
+  lat: number | null;
+  lng: number | null;
+  contact_phone: string | null;
 };
 
 // helpers
@@ -112,6 +137,30 @@ function categoriesOf(p: Product): string[] {
   return Array.from(new Set(all.filter(Boolean)));
 }
 
+async function fetchCatalog() {
+  // 1) tenta a VIEW com ETA dinâmico por loja
+  let r = await supabase
+    .from("products_with_eta")
+    .select(
+      "id,name,store_name,photo_url,eta_text_runtime,price_tag,sizes,store_id,store_slug"
+    )
+    .limit(60);
+
+  if (!r.error) return (r.data || []) as Product[];
+
+  // 2) fallback: tabela antiga (mantém tudo funcionando)
+  const r2 = await supabase
+    .from("products")
+    .select(
+      "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count,categories"
+    )
+    .eq("is_active", true)
+    .limit(60);
+
+  if (r2.error) throw r2.error;
+  return (r2.data || []) as Product[];
+}
+
 
 export default function Home() {
   const router = useRouter();
@@ -163,7 +212,7 @@ export default function Home() {
           "com curadoria de excelência e entrega rápida",
         ],
         image:
-        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Brunello-Cucinelli-Portofino-Summer-2023-Couples-Outfits.jpg",
+          "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Brunello-Cucinelli-Portofino-Summer-2023-Couples-Outfits.jpg",
         href: "/collections/sobre",
       },
     ],
@@ -178,7 +227,6 @@ export default function Home() {
     );
     return () => clearInterval(id);
   }, [banners.length]);
-  
 
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
@@ -211,17 +259,11 @@ export default function Home() {
         const { data: u } = await supabase.auth.getUser();
 
         if (!u.user) {
-          // Visitante: catálogo público
-          const { data, error } = await supabase
-            .from("products")
-            .select(
-              "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count,categories"
-            )            
-            .eq("is_active", true)
-            .limit(60);
-          if (error) throw error;
-          setProducts((data || []) as Product[]);
-          setProfile(null);
+          // Visitante: catálogo público (usa VIEW com ETA dinâmico + fallback)
+const data = await fetchCatalog();
+setProducts(data);
+setProfile(null);
+
         } else {
           // Logado: perfil + mesmo catálogo
           let profResp = await supabase
@@ -247,15 +289,9 @@ export default function Home() {
           const prof = profResp.data as Profile;
           setProfile(prof);
 
-          const { data, error } = await supabase
-            .from("products")
-            .select(
-              "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count,categories"
-            )
-            .eq("is_active", true)
-            .limit(60);
-          if (error) throw error;
-          setProducts((data || []) as Product[]);
+          const data = await fetchCatalog();
+          setProducts(data);
+
         }
       } catch (e: any) {
         const msg = String(e?.message || "");
@@ -269,17 +305,17 @@ export default function Home() {
 
   // Filtros
   // Deriva categorias dinamicamente dos produtos (category + categories[])
-const dynamicCategories = useMemo(() => {
-  const set = new Set<string>();
-  for (const p of products) categoriesOf(p).forEach((c) => set.add(c));
-  return Array.from(set).sort();
-}, [products]);
+  const dynamicCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) categoriesOf(p).forEach((c) => set.add(c));
+    return Array.from(set).sort();
+  }, [products]);
 
-const chipCategories = useMemo(
-  () => ["Tudo", ...dynamicCategories],
-  [dynamicCategories]
-);
-const allCategories = dynamicCategories; // compat com o restante do código
+  const chipCategories = useMemo(
+    () => ["Tudo", ...dynamicCategories],
+    [dynamicCategories]
+  );
+  const allCategories = dynamicCategories; // compat com o restante do código
 
   const [chipCategory, setChipCategory] = useState<string>("Tudo");
 
@@ -326,10 +362,10 @@ const allCategories = dynamicCategories; // compat com o restante do código
       // texto
       if (q) {
         const cats = categoriesOf(p);
-const matchText =
-  p.name.toLowerCase().includes(q) ||
-  p.store_name.toLowerCase().includes(q) ||
-  cats.some((c) => c.includes(q));
+        const matchText =
+          p.name.toLowerCase().includes(q) ||
+          p.store_name.toLowerCase().includes(q) ||
+          cats.some((c) => c.includes(q));
 
         if (!matchText) return false;
       }
@@ -337,14 +373,13 @@ const matchText =
       // categorias (modal > chip)
       const cats = categoriesOf(p);
 
-if (selectedCategories.size > 0) {
-  // ao menos uma das selecionadas precisa estar nas categorias do produto
-  const hit = cats.some((c) => selectedCategories.has(c));
-  if (!hit) return false;
-} else if (chipCategory !== "Tudo") {
-  if (!cats.includes(chipCategory.toLowerCase())) return false;
-}
-
+      if (selectedCategories.size > 0) {
+        // ao menos uma das selecionadas precisa estar nas categorias do produto
+        const hit = cats.some((c) => selectedCategories.has(c));
+        if (!hit) return false;
+      } else if (chipCategory !== "Tudo") {
+        if (!cats.includes(chipCategory.toLowerCase())) return false;
+      }
 
       // gênero
       if (selectedGenders.size > 0) {
@@ -435,7 +470,7 @@ if (selectedCategories.size > 0) {
       href: "/collections/fasano",
       image:
         "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Untitled%20(448%20x%20448%20px)-4.png",
-        alt: "selecao fasano"
+      alt: "selecao fasano",
     },
     landscapeTriplet: [
       {
@@ -460,20 +495,20 @@ if (selectedCategories.size > 0) {
   function ProductCard({ p }: { p: Product }) {
     return (
       <Link
-  href={`/product/${p.id}`}
-  onClick={() => {
-    const mainCat = categoriesOf(p)[0] || "";
-    bumpCategory(mainCat);
-    bumpStore(p.store_name || "");
-    setViews((prev) => {
-      const next = { ...prev };
-      const k = String(p.id);
-      next[k] = (next[k] || 0) + 1;
-      return next;
-    });
-  }}
-  className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
->
+        href={`/product/${p.id}`}
+        onClick={() => {
+          const mainCat = categoriesOf(p)[0] || "";
+          bumpCategory(mainCat);
+          bumpStore(p.store_name || "");
+          setViews((prev) => {
+            const next = { ...prev };
+            const k = String(p.id);
+            next[k] = (next[k] || 0) + 1;
+            return next;
+          });
+        }}
+        className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
+      >
         <div className="relative h-44">
           <span className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border bg-[#141414] border-[#141414]">
             {formatBRLAlpha(p.price_tag)}
@@ -491,20 +526,23 @@ if (selectedCategories.size > 0) {
         </div>
 
         <div className="p-3">
-        {(() => {
-  const mainCat = categoriesOf(p)[0];
-  return mainCat ? (
-    <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
-      {mainCat}
-    </p>
-  ) : null;
-})()}
+          {(() => {
+            const mainCat = categoriesOf(p)[0];
+            return mainCat ? (
+              <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
+                {mainCat}
+              </p>
+            ) : null;
+          })()}
 
           <p className="text-sm font-semibold leading-tight line-clamp-2">
             {p.name}
           </p>
           <p className="text-xs text-gray-500">{p.store_name}</p>
-          <p className="text-xs text-gray-400">{p.eta_text ?? "até 1h"}</p>
+         <p className="text-xs text-gray-400">
+  {p.eta_text_runtime ?? p.eta_text ?? "até 1h"}
+</p>
+
         </div>
       </Link>
     );
@@ -795,34 +833,38 @@ if (selectedCategories.size > 0) {
               </Link>
             ))}
             {banners.length > 1 && (
-  <button
-    type="button"
-    aria-label="Anterior"
-    onClick={() =>
-      setCurrentBanner(
-        (p) => (p - 1 + banners.length) % banners.length
-      )
-    }
-    className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
-  >
-    ...
-  </button>
-)}
+              <button
+                type="button"
+                aria-label="Anterior"
+                onClick={() =>
+                  setCurrentBanner(
+                    (p) => (p - 1 + banners.length) % banners.length
+                  )
+                }
+                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
+              >
+                ...
+              </button>
+            )}
 
-{banners.length > 1 && (
-  <button
-    type="button"
-    aria-label="Próximo"
-    onClick={() => setCurrentBanner((p) => (p + 1) % banners.length)}
-    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
-  >
-    ...
-  </button>
-)}
+            {banners.length > 1 && (
+              <button
+                type="button"
+                aria-label="Próximo"
+                onClick={() =>
+                  setCurrentBanner((p) => (p + 1) % banners.length)
+                }
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
+              >
+                ...
+              </button>
+            )}
 
-<div
-  className={`absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 ${banners.length <= 1 ? "hidden" : ""}`}
->
+            <div
+              className={`absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 ${
+                banners.length <= 1 ? "hidden" : ""
+              }`}
+            >
               {banners.map((_, i) => (
                 <span
                   key={i}
@@ -1131,8 +1173,7 @@ if (selectedCategories.size > 0) {
                         Marque quantas quiser
                       </div>
                       <div className="flex flex-wrap gap-2">
-                      {allCategories.map((c) => {
-
+                        {allCategories.map((c) => {
                           const key = c.toLowerCase();
                           const active = selectedCategories.has(key);
                           return (
@@ -1222,26 +1263,23 @@ if (selectedCategories.size > 0) {
             pushProducts(4);
 
             // 4) banner Fasano (quadrado, sem corte e com borda igual aos demais)
-items.push(
-  <Link
-    key="banner-selectionHero"
-    href={inlineBanners.selectionHero.href}
-    className="col-span-2 rounded-3xl overflow-hidden relative aspect-square bg-white"
-    aria-label={inlineBanners.selectionHero.alt}
-  >
-    {/* imagem inteira, sem corte */}
-    <img
-      src={inlineBanners.selectionHero.image}
-      alt={inlineBanners.selectionHero.alt}
-      className="absolute inset-0 w-full h-full object-contain"
-      loading="lazy"
-      decoding="async"
-    />
-  </Link>
-);
-
-
-
+            items.push(
+              <Link
+                key="banner-selectionHero"
+                href={inlineBanners.selectionHero.href}
+                className="col-span-2 rounded-3xl overflow-hidden relative aspect-square bg-white"
+                aria-label={inlineBanners.selectionHero.alt}
+              >
+                {/* imagem inteira, sem corte */}
+                <img
+                  src={inlineBanners.selectionHero.image}
+                  alt={inlineBanners.selectionHero.alt}
+                  className="absolute inset-0 w-full h-full object-contain"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </Link>
+            );
 
             // 5) mais 4 produtos
             pushProducts(4);
