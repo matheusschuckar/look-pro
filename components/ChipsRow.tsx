@@ -15,6 +15,7 @@ type ChipsRowProps = {
   openFilter: () => void;
 
   onBumpCategory: (c: string, w: number) => void;
+  onToggleGender: (g: "female" | "male") => void; // 👈 novo
 };
 
 export default function ChipsRow({
@@ -28,27 +29,43 @@ export default function ChipsRow({
   clearFilters,
   openFilter,
   onBumpCategory,
+  onToggleGender,
 }: ChipsRowProps) {
   return anyActiveFilter ? (
     <div className="mt-3 flex flex-wrap gap-2">
       {[...selectedCategories].map((c) => (
-        <span key={`c-${c}`} className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]">
+        <span
+          key={`c-${c}`}
+          className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]"
+        >
           {c}
         </span>
       ))}
+
       {selectedCategories.size === 0 && chipCategory !== "Tudo" && (
-        <span className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]">{chipCategory}</span>
+        <span className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]">
+          {chipCategory}
+        </span>
       )}
+
       {[...selectedGenders].map((g) => (
-        <span key={`g-${g}`} className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]">
+        <span
+          key={`g-${g}`}
+          className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
+        >
           {g === "female" ? "Feminino" : "Masculino"}
         </span>
       ))}
+
       {[...selectedSizes].map((s) => (
-        <span key={`s-${s}`} className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]">
+        <span
+          key={`s-${s}`}
+          className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
+        >
           {s}
         </span>
       ))}
+
       <button
         type="button"
         onClick={clearFilters}
@@ -73,7 +90,9 @@ export default function ChipsRow({
                   onBumpCategory(c, 0.8);
                 }}
                 className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
-                  active ? "text-white bg-[#141414] border-[#141414]" : "surface border-warm text-gray-800 hover:opacity-95"
+                  active
+                    ? "text-white bg-[#141414] border-[#141414]"
+                    : "surface border-warm text-gray-800 hover:opacity-95"
                 }`}
               >
                 {c}
@@ -90,14 +109,13 @@ export default function ChipsRow({
             return (
               <button
                 key={`gender-${g.id}`}
-                // o estado de gênero é controlado no modal; aqui não altera,
-                // só mostramos os chips de navegação rápida "Tudo / categorias"
-                className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
-                  active ? "text-white bg-[#141414] border-[#141414]" : "surface border-warm text-gray-800 hover:opacity-95"
-                }`}
+                onClick={() => onToggleGender(g.id)} // 👈 agora é clicável
                 aria-pressed={active}
-                disabled
-                title="Ajuste de gênero pelo filtro"
+                className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
+                  active
+                    ? "text-white bg-[#141414] border-[#141414]"
+                    : "surface border-warm text-gray-800 hover:opacity-95"
+                }`}
               >
                 {g.label}
               </button>
@@ -115,7 +133,9 @@ export default function ChipsRow({
                   onBumpCategory(c, 0.8);
                 }}
                 className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
-                  active ? "text-white bg-[#141414] border-[#141414]" : "surface border-warm text-gray-800 hover:opacity-95"
+                  active
+                    ? "text-white bg-[#141414] border-[#141414]"
+                    : "surface border-warm text-gray-800 hover:opacity-95"
                 }`}
               >
                 {c[0].toUpperCase() + c.slice(1)}
