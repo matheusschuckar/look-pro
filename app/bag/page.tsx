@@ -98,7 +98,7 @@ type Profile = {
   cpf?: string | null;
 };
 
-// ===== helpers de validação iguais ao Profile =====
+// ===== helpers de validação =====
 function onlyDigits(v: string) {
   return (v || "").replace(/\D/g, "");
 }
@@ -183,15 +183,13 @@ function BagPageInner() {
     })();
   }, []);
 
-  // Se veio com ?checkout=1 → vai para etapa de confirmação (e não gera PIX direto)
+  // Se veio com ?checkout=1 → vai para etapa de confirmação (não gera PIX direto)
   useEffect(() => {
     const wantsCheckout = search?.get("checkout") === "1";
     if (!wantsCheckout) return;
     if (items.length === 0) return;
-    // espera o profile carregar para preencher form
     if (!profile?.id) return;
     setStep("confirm");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, profile?.id, items.length]);
 
   function handleQty(i: number, q: number) {
@@ -213,11 +211,10 @@ function BagPageInner() {
   const delivery = items.length > 0 ? DELIVERY_FEE * uniqueStores.length : 0;
   const total = items.length > 0 ? subtotal + delivery : 0;
 
-  // salva o endereço EDITADO no user_profiles (atualiza o perfil oficial)
+  // salva o endereço EDITADO no user_profiles (oficial)
   async function saveAddressToProfile() {
     if (!profile?.id) return;
 
-    // validações mínimas (iguais às do Profile)
     if (!cepValid(cep)) {
       throw new Error("CEP inválido. Use 8 dígitos.");
     }
@@ -240,7 +237,6 @@ function BagPageInner() {
 
     if (error) throw error;
 
-    // atualiza o estado local do perfil para refletir o que foi salvo
     setProfile((prev) =>
       prev
         ? {
@@ -267,7 +263,7 @@ function BagPageInner() {
         return;
       }
 
-      // 1) Checa sessão
+      // 1) Sessão/e-mail
       const { data: u } = await supabase.auth.getUser();
       const sessionUser = u?.user ?? null;
 
@@ -276,17 +272,16 @@ function BagPageInner() {
         return;
       }
 
-      // 2) Garante e-mail (usa o do user ou do perfil como fallback)
       const email = sessionUser.email || profile?.email || null;
       if (!email) {
         router.replace(`/profile?next=${encodeURIComponent("/bag?checkout=1#pix")}`);
         return;
       }
 
-      // 3) Antes de gerar o PIX, salva possíveis mudanças de endereço no perfil
+      // 2) Salva possíveis alterações de endereço
       await saveAddressToProfile();
 
-      // 4) PIX config
+      // 3) Gera PIX único para o pedido inteiro
       const key = (process.env.NEXT_PUBLIC_PIX_KEY || "").replace(/\D/g, "");
       const merchant = (process.env.NEXT_PUBLIC_PIX_MERCHANT || "LOOK PAGAMENTOS").toUpperCase();
       const cityPay = (process.env.NEXT_PUBLIC_PIX_CITY || "SAO PAULO").toUpperCase();
@@ -296,55 +291,73 @@ function BagPageInner() {
       }
 
       const { subtotal } = bagTotals(items);
-      const uniqueStores = Array.from(new Set(items.map((it) => it.store_name)));
-      const delivery = items.length > 0 ? DELIVERY_FEE * uniqueStores.length : 0;
-      const total = items.length > 0 ? subtotal + delivery : 0;
+      const groups = items.reduce((acc, it) => {
+        (acc[it.store_name] ||= []).push(it);
+        return acc;
+      }, {} as Record<string, BagItem[]>);
 
-      const txid = `LOOK${Date.now()}`.slice(0, 25);
-      const payload = buildPix({ key, merchant, city: cityPay, amount: total, txid });
+      const numStores = Object.keys(groups).length;
+      const totalDelivery = DELIVERY_FEE * numStores;
+      const grandTotal = subtotal + totalDelivery;
 
-      // resumo dos itens para Notes
-      const itemsSummary = items
-        .map(
-          (it) =>
-            `• ${it.name} (${it.size}) — ${it.store_name} — x${it.qty} — R$ ${(
-              it.unit_price * it.qty
-            ).toFixed(2)}`
-        )
-        .join("\n");
+      // Order ID (compartilhado entre as linhas) = txid
+      const orderId = `LOOK${Date.now()}`.slice(0, 25);
+      const payload = buildPix({ key, merchant, city: cityPay, amount: grandTotal, txid: orderId });
+      const createdAtIso = new Date().toISOString();
 
       setCreating(true);
 
-      await createOrder({
-        Status: "Aguardando Pagamento",
+      // 4) Cria UMA linha por LOJA
+      for (const storeName of Object.keys(groups)) {
+        const gItems = groups[storeName];
+        const gSubtotal = gItems.reduce((s, it) => s + it.unit_price * it.qty, 0);
+        const gDelivery = DELIVERY_FEE;
+        const gTotal = gSubtotal + gDelivery;
 
-        Name: profile?.name || "",
-        "User Email": email,
-        "User WhatsApp": profile?.whatsapp || "",
-        Street: street.trim() || profile?.street || "",
-        Number: number.trim() || profile?.number || "",
-        Complement: (complement || "").trim() || profile?.complement || "",
-        CEP: onlyDigits(cep) || profile?.cep || "",
-        City: city.trim() || profile?.city || "São Paulo",
+        const itemsSummary = gItems
+          .map(
+            (it) =>
+              `• ${it.name} (${it.size}) — ${it.store_name} — x${it.qty} — R$ ${(it.unit_price * it.qty).toFixed(2)}`
+          )
+          .join("\n");
 
-        "Item Price": Number(subtotal.toFixed(2)),
-        "Delivery Fee": Number(delivery.toFixed(2)),
-        Total: Number(total.toFixed(2)),
+        await createOrder({
+          // —— campos “gerais” do pedido
+          Status: "Aguardando Pagamento",
+          "Order ID": orderId,              // <<<<<< aqui
+          "Created At": createdAtIso,       // <<<<<< e aqui
 
-        "Product ID": items.map((it) => String(it.product_id)).join(", "),
-        "Product Name": items.map((it) => it.name).join(" | "),
-        "Store Name": items.map((it) => it.store_name).join(", "),
-        Size: items.map((it) => it.size).join(", "),
+          // —— comprador / endereço (usa os dados confirmados)
+          Name: profile?.name || "",
+          "User Email": email,
+          "User WhatsApp": profile?.whatsapp || "",
+          Street: street.trim() || profile?.street || "",
+          Number: number.trim() || profile?.number || "",
+          Complement: (complement || "").trim() || profile?.complement || "",
+          CEP: onlyDigits(cep) || profile?.cep || "",
+          City: city.trim() || profile?.city || "São Paulo",
 
-        Notes: `Items:\n${itemsSummary}\n\nLojas distintas: ${uniqueStores.length}\nTXID: ${txid}`,
-        "PIX Code": payload,
-      });
+          // —— valores da LOJA específica
+          "Item Price": Number(gSubtotal.toFixed(2)),
+          "Delivery Fee": Number(gDelivery.toFixed(2)),
+          Total: Number(gTotal.toFixed(2)),
+
+          // —— itens desta loja
+          "Product ID": gItems.map((it) => String(it.product_id)).join(", "),
+          "Product Name": gItems.map((it) => it.name).join(" | "),
+          "Store Name": storeName,
+          Size: gItems.map((it) => it.size).join(", "),
+
+          Notes: `Loja: ${storeName}\nItems:\n${itemsSummary}\n\nLojas distintas neste pedido: ${numStores}\nOrderID: ${orderId}`,
+          "PIX Code": payload, // mesmo PIX para todas as linhas
+        });
+      }
 
       setPixCode(payload);
       setOkMsg("Pedido criado! Pague via PIX para prosseguir.");
-      setStep("pix"); // vai para a etapa do PIX
+      setStep("pix");
 
-      // rola até a seção do PIX
+      // rola para o PIX
       setTimeout(() => {
         if (typeof window !== "undefined") {
           const el = document.querySelector("#pix-section");
@@ -375,7 +388,6 @@ function BagPageInner() {
   }
 
   // UI
-
   const { subtotal: st } = bagTotals(items);
   const deliveryUi = items.length > 0 ? DELIVERY_FEE * uniqueStores.length : 0;
   const totalUi = items.length > 0 ? st + deliveryUi : 0;
@@ -385,14 +397,11 @@ function BagPageInner() {
       <h1 className="text-2xl font-semibold mb-1">Bag</h1>
       <p className="text-sm text-gray-700 mb-4">Revise seus itens</p>
 
-      {/* Etapa 1: revisão da sacola */}
+      {/* Etapa 1: revisão */}
       {step === "review" && items.length === 0 && !pixCode ? (
         <div className="rounded-xl border p-4 bg-white">
           <p className="text-sm">Sua sacola está vazia.</p>
-          <Link
-            href="/"
-            className="inline-block mt-3 rounded-lg border px-3 py-2 text-sm"
-          >
+          <Link href="/" className="inline-block mt-3 rounded-lg border px-3 py-2 text-sm">
             Voltar para explorar
           </Link>
         </div>
@@ -402,25 +411,14 @@ function BagPageInner() {
             <>
               <div className="space-y-3">
                 {items.map((it, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border p-2 bg-white flex gap-3"
-                  >
-                    <img
-                      src={it.photo_url}
-                      alt={it.name}
-                      className="w-20 h-20 object-cover rounded-lg"
-                    />
+                  <div key={i} className="rounded-xl border p-2 bg-white flex gap-3">
+                    <img src={it.photo_url} alt={it.name} className="w-20 h-20 object-cover rounded-lg" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-black leading-tight">
-                        {it.name}
-                      </p>
+                      <p className="text-sm font-medium text-black leading-tight">{it.name}</p>
                       <p className="text-xs text-gray-600">{it.store_name}</p>
                       <p className="text-xs text-gray-600">Size: {it.size}</p>
                       <div className="mt-1 flex items-center gap-2">
                         <span className="text-xs text-gray-600">Qtd</span>
-
-                        {/* Quantidade: – [n] + */}
                         <div className="inline-flex items-center rounded-full border border-gray-200 overflow-hidden">
                           <button
                             type="button"
@@ -430,9 +428,7 @@ function BagPageInner() {
                           >
                             –
                           </button>
-                          <div className="w-8 text-center text-sm font-medium tabular-nums select-none">
-                            {it.qty}
-                          </div>
+                          <div className="w-8 text-center text-sm font-medium tabular-nums select-none">{it.qty}</div>
                           <button
                             type="button"
                             onClick={() => setItems(updateQty(i, it.qty + 1))}
@@ -442,22 +438,13 @@ function BagPageInner() {
                             +
                           </button>
                         </div>
-
-                        {/* Remover */}
                         <button
                           onClick={() => setItems(removeFromBag(i))}
                           className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.98] shadow-sm transition"
                           aria-label={`Remover ${it.name} da sacola`}
                           title="Remover"
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            className="text-gray-700"
-                          >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-700">
                             <path d="M3 6h18" strokeWidth="2" strokeLinecap="round" />
                             <path d="M8 6V4h8v2" strokeWidth="2" strokeLinecap="round" />
                             <path d="M19 6l-1 14H6L5 6" strokeWidth="2" strokeLinecap="round" />
@@ -467,9 +454,7 @@ function BagPageInner() {
                         </button>
                       </div>
                     </div>
-                    <div className="text-sm font-semibold">
-                      R$ {(it.unit_price * it.qty).toFixed(2)}
-                    </div>
+                    <div className="text-sm font-semibold">R$ {(it.unit_price * it.qty).toFixed(2)}</div>
                   </div>
                 ))}
               </div>
@@ -485,25 +470,20 @@ function BagPageInner() {
                     Delivery{" "}
                     {uniqueStores.length > 0 && (
                       <span className="text-gray-500">
-                        ({uniqueStores.length}{" "}
-                        {uniqueStores.length === 1 ? "loja" : "lojas"} × R${" "}
-                        {DELIVERY_FEE.toFixed(2)})
+                        ({uniqueStores.length} {uniqueStores.length === 1 ? "loja" : "lojas"} × R$ {DELIVERY_FEE.toFixed(2)})
                       </span>
                     )}
                   </span>
-                  <span>R$ {deliveryUi.toFixed(2)}</span>
+                  <span>R$ {delivery.toFixed(2)}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm font-semibold mt-1">
                   <span>Total</span>
-                  <span>R$ {totalUi.toFixed(2)}</span>
+                  <span>R$ {total.toFixed(2)}</span>
                 </div>
 
                 <div className="mt-4 flex flex-col space-y-3">
-                  <Link
-                    href="/"
-                    className="w-full rounded-lg border px-3 py-2 text-sm text-center"
-                  >
+                  <Link href="/" className="w-full rounded-lg border px-3 py-2 text-sm text-center">
                     Continuar comprando
                   </Link>
                   <button
@@ -521,7 +501,7 @@ function BagPageInner() {
         </>
       ) : null}
 
-      {/* Etapa 2: confirmação/edição do endereço + botões de pagamento */}
+      {/* Etapa 2: confirmação/edição do endereço + botões */}
       {step === "confirm" && !pixCode && items.length > 0 && (
         <div className="rounded-xl border p-4 bg-white mt-4">
           <h2 className="text-lg font-semibold mb-2">Confirme seu endereço</h2>
@@ -602,9 +582,7 @@ function BagPageInner() {
                   <option key={uf} value={uf}>{uf}</option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute right-3 top-8 text-neutral-400">
-                ▼
-              </span>
+              <span className="pointer-events-none absolute right-3 top-8 text-neutral-400">▼</span>
             </div>
             <div className="relative">
               <label className="mb-1 block text-xs text-gray-700">Cidade</label>
@@ -647,49 +625,30 @@ function BagPageInner() {
 
       {/* Etapa 3: PIX */}
       {(step === "pix" || pixCode) && (
-        <div
-          id="pix-section"
-          className="rounded-xl border p-4 bg-white mt-4"
-        >
+        <div id="pix-section" className="rounded-xl border p-4 bg-white mt-4">
           <h2 className="text-lg font-semibold mb-1">Pagamento PIX</h2>
           <p className="text-xs text-gray-700 mb-3">
-            Escaneie o QR ou toque em “Copiar código” para pagar. Valor:{" "}
-            <b>R$ {totalUi.toFixed(2)}</b>
+            Escaneie o QR ou toque em “Copiar código” para pagar. Valor: <b>R$ {totalUi.toFixed(2)}</b>
           </p>
 
           {pixCode ? (
             <>
               <div className="flex justify-center">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-                    pixCode
-                  )}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(pixCode)}`}
                   alt="QR Code PIX"
                   className="rounded-lg"
                 />
               </div>
 
               <div className="mt-3">
-                <label className="text-xs text-gray-600">
-                  Copia e cola PIX
-                </label>
-                <textarea
-                  className="w-full rounded-md border p-2 text-xs"
-                  rows={4}
-                  readOnly
-                  value={pixCode}
-                />
+                <label className="text-xs text-gray-600">Copia e cola PIX</label>
+                <textarea className="w-full rounded-md border p-2 text-xs" rows={4} readOnly value={pixCode} />
                 <div className="mt-2 flex flex-col space-y-2">
-                  <button
-                    onClick={copyPix}
-                    className="rounded-lg bg-black text-white px-3 py-2 text-sm font-semibold"
-                  >
+                  <button onClick={copyPix} className="rounded-lg bg-black text-white px-3 py-2 text-sm font-semibold">
                     Copiar código
                   </button>
-                  <Link
-                    href="/orders"
-                    className="rounded-lg border px-3 py-2 text-sm text-center"
-                  >
+                  <Link href="/orders" className="rounded-lg border px-3 py-2 text-sm text-center">
                     Acesse seus pedidos
                   </Link>
                 </div>
@@ -700,11 +659,8 @@ function BagPageInner() {
           )}
 
           <p className="text-[11px] text-gray-500 mt-3">
-            Recebedor:{" "}
-            {(
-              process.env.NEXT_PUBLIC_PIX_MERCHANT || "LOOK PAGAMENTOS"
-            ).toUpperCase()}{" "}
-            — Chave: {process.env.NEXT_PUBLIC_PIX_KEY || "(não definida)"}
+            Recebedor: {(process.env.NEXT_PUBLIC_PIX_MERCHANT || "LOOK PAGAMENTOS").toUpperCase()} — Chave:{" "}
+            {process.env.NEXT_PUBLIC_PIX_KEY || "(não definida)"}
           </p>
           {okMsg && <p className="text-xs text-green-700 mt-2">{okMsg}</p>}
           {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
