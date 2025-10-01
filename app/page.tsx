@@ -7,7 +7,18 @@ import type React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import BottomNav from "../components/BottomNav";
-import { getPrefs, bumpCategory, bumpStore } from "@/lib/prefs";
+import {
+  getPrefs,          // compat (usado por partes do código)
+  getPrefsV2,        // novo
+  bumpCategory,
+  bumpStore,
+  bumpGender,
+  bumpSize,
+  bumpPriceBucket,
+  bumpEtaBucket,
+  bumpProduct,
+  decayAll,
+} from "@/lib/prefs";
 import { getViewsMap } from "@/lib/metrics";
 
 // ruído determinístico por produto + seed da sessão
@@ -135,6 +146,35 @@ function categoriesOf(p: Product): string[] {
   const many = (p.categories || []).map((c) => (c || "").trim().toLowerCase());
   const all = (one ? [one] : []).concat(many);
   return Array.from(new Set(all.filter(Boolean)));
+}
+
+// ===== Buckets de preço e ETA (grossos, mas eficazes) =====
+function priceBucket(v: number): string {
+  if (v < 200) return "low|0-199";
+  if (v < 500) return "mid|200-499";
+  return "high|500+";
+}
+function etaBucket(txt?: string | null): string {
+  // heurística simples: procure minutos no texto "até 1h", "30-60 min", "2h"
+  const s = (txt || "").toLowerCase();
+  // prioridade por minutos explícitos
+  const m = s.match(/(\d+)\s*(min|mins|minutos)/);
+  if (m) {
+    const mins = Number(m[1] || 0);
+    if (mins <= 60) return "quick|<=60";
+    if (mins <= 120) return "std|<=120";
+    return "long|>120";
+  }
+  // horas
+  const h = s.match(/(\d+)\s*h/);
+  if (h) {
+    const hrs = Number(h[1] || 0);
+    if (hrs <= 1) return "quick|<=60";
+    if (hrs <= 2) return "std|<=120";
+    return "long|>120";
+  }
+  // fallback
+  return "std|<=120";
 }
 
 async function fetchCatalog() {
@@ -411,34 +451,124 @@ setProfile(null);
     selectedSizes,
   ]);
 
-  // ranking por interesse
-  const W_CAT = 0.9;
-  const W_STORE = 0.6;
-  const JITTER = 0.2;
+  // ===== Novo ranking multi-sinal com exploração =====
+const EPSILON = 0.08;            // chance de explorar (mostrar trending/aleatório)
+const JITTER = 0.08;             // ruído pequeno e determinístico
+const HF_DAYS = 14;              // meia-vida usada no decay local
+// pesos por feature (ajuste fino conforme perceber o comportamento)
+const W = {
+  CAT: 1.00,
+  STORE: 0.65,
+  GENDER: 0.45,
+  SIZE: 0.35,   // útil quando usuário costuma escolher tamanhos
+  PRICE: 0.30,
+  ETA: 0.25,
+  PRODUCT: 0.20, // memoriza afinidade pontual
+  TREND: 0.15,   // “popularidade” local (views) ou view_count
+};
 
-  const filteredRanked = useMemo<Product[]>(() => {
-    const prefs = getPrefs(); // { cat: {...}, store: {...} }
+const filteredRanked = useMemo<Product[]>(() => {
+  // aplica um decay leve a cada montagem/uso (barato e mantém prefs frescas)
+  decayAll(HF_DAYS);
 
-    const catVals = Object.values(prefs.cat);
-    const storeVals = Object.values(prefs.store);
-    const maxCat = catVals.length ? Math.max(1, ...catVals) : 1;
-    const maxStore = storeVals.length ? Math.max(1, ...storeVals) : 1;
+  // lê V2 + fallback V1 (compat)
+  const p2 = getPrefsV2();
+  const p1 = getPrefs();
 
-    return filtered
-      .map((p: Product) => {
-        const catKey = (p.category || "").toLowerCase();
-        const storeKey = (p.store_name || "").toLowerCase();
+  // normalizadores por feature
+  function norm(map: Record<string, KeyStat> | Record<string, number>) {
+    const vals = Object.values(map).map((v: any) => typeof v === "number" ? v : (v?.w ?? 0));
+    const max = vals.length ? Math.max(1, ...vals) : 1;
+    return { map, max };
+  }
 
-        const catScore = (prefs.cat[catKey] || 0) / maxCat; // 0..1
-        const storeScore = (prefs.store[storeKey] || 0) / maxStore; // 0..1
-        const noise = noiseFor(p.id, rankSeed) * JITTER;
+  const nCat = norm(p2.cat);     // decaído
+  const nStore = norm(p2.store);
+  const nGender = norm(p2.gender);
+  const nSize = norm(p2.size);
+  const nPrice = norm(p2.price);
+  const nEta = norm(p2.eta);
+  const nProd = norm(p2.product);
 
-        const score = W_CAT * catScore + W_STORE * storeScore + noise;
-        return { p, score };
-      })
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.p);
-  }, [filtered, rankSeed]);
+  // fallback de popularidade: usa views locais e/ou view_count do produto
+  const localViews = views || {}; // já vem do seu state
+  const trendingMax = Object.values(localViews).length
+    ? Math.max(1, ...Object.values(localViews))
+    : 1;
+
+  // exploração?
+  const explore = Math.random() < EPSILON;
+
+  const scored = filtered.map((p) => {
+    const cats = categoriesOf(p);
+    const mainCat = cats[0] || (p as any).category || "";
+    const storeKey = (p.store_name || "").toLowerCase();
+    const genderKey = (p.gender || "").toLowerCase();
+    const priceKey = priceBucket(p.price_tag);
+    const etaTxt = (p as any).eta_text_runtime ?? (p as any).eta_text ?? null;
+    const etaKey = etaBucket(etaTxt);
+    const prodKey = String(p.id);
+
+    // pega o valor decaído da V2 (se existirem) OU V1 como fallback adicional
+    const fromMap = (nm: ReturnType<typeof norm>, key: string, alsoV1?: Record<string, number>) => {
+      const k = (key || "").toLowerCase();
+      const v2 = (nm.map as any)[k];
+      const raw = typeof v2 === "number" ? v2 : v2?.w ?? 0;
+      const legacy = alsoV1 ? (alsoV1[k] || 0) : 0;
+      const v = Math.max(raw, legacy);
+      return v / Math.max(1, nm.max);
+    };
+
+    const fCat = fromMap(nCat, mainCat, p1.cat);
+    const fStore = fromMap(nStore, storeKey, p1.store);
+    const fGender = fromMap(nGender, genderKey);
+    const fSize = 0; // (na Home não há seleção de tamanho; deixamos 0 aqui)
+    const fPrice = fromMap(nPrice, priceKey);
+    const fEta = fromMap(nEta, etaKey);
+    const fProd = fromMap(nProd, prodKey);
+
+    // popularidade/trending
+    const local = (localViews[String(p.id)] || 0) / trendingMax;
+    const remote = typeof p.view_count === "number" ? p.view_count : 0;
+    const trend = Math.max(local, remote > 0 ? Math.min(remote / 50, 1) : 0); // normaliza grosseiro
+
+    // ruído determinístico por produto
+    const noise = noiseFor(p.id, rankSeed) * JITTER;
+
+    // score de exploração? se sim, reduzimos impacto das prefs e aumentamos trend
+    const weightTrend = explore ? W.TREND * 2.2 : W.TREND;
+
+    const score =
+      W.CAT * fCat +
+      W.STORE * fStore +
+      W.GENDER * fGender +
+      W.SIZE * fSize +
+      W.PRICE * fPrice +
+      W.ETA * fEta +
+      W.PRODUCT * fProd +
+      weightTrend * trend +
+      noise;
+
+    return { p, score };
+  });
+
+  // ordena por score
+  scored.sort((a, b) => b.score - a.score);
+
+  // pequena injeção de exploração: move alguns itens do meio pro topo aleatoriamente
+  if (explore && scored.length > 8) {
+    const injected = [...scored];
+    for (let k = 0; k < Math.min(6, Math.floor(scored.length / 8)); k++) {
+      const idx = 4 + Math.floor(Math.random() * Math.min(24, injected.length - 5));
+      const [item] = injected.splice(idx, 1);
+      injected.splice(2 * k + 1, 0, item);
+    }
+    return injected.map((x) => x.p);
+  }
+
+  return scored.map((x) => x.p);
+}, [filtered, views, rankSeed]);
+
 
   const locationLabel = profile?.city
     ? `${profile.city}${profile?.state ? `, ${profile.state}` : ""}`
@@ -497,9 +627,26 @@ setProfile(null);
       <Link
         href={`/product/${p.id}`}
         onClick={() => {
-          const mainCat = categoriesOf(p)[0] || "";
-          bumpCategory(mainCat);
-          bumpStore(p.store_name || "");
+          // categorias (principal + demais)
+          const cats = categoriesOf(p);
+          const mainCat = cats[0] || "";
+          if (mainCat) bumpCategory(mainCat, 1.2); // leve bônus para a principal
+        
+          // loja
+          bumpStore(p.store_name || "", 1);
+        
+          // gênero (se existir)
+          if (p.gender) bumpGender(p.gender, 0.8);
+        
+          // preço e ETA
+          bumpPriceBucket(priceBucket(p.price_tag), 0.6);
+          const etaTxt = (p as any).eta_text_runtime ?? (p as any).eta_text ?? null;
+          bumpEtaBucket(etaBucket(etaTxt), 0.5);
+        
+          // micro boost por produto (ajuda a personalizar finamente)
+          bumpProduct(p.id, 0.25);
+        
+          // métrica local de views (mantido)
           setViews((prev) => {
             const next = { ...prev };
             const k = String(p.id);
@@ -507,6 +654,7 @@ setProfile(null);
             return next;
           });
         }}
+        
         className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
       >
         <div className="relative h-44">
@@ -934,7 +1082,7 @@ setProfile(null);
                     return (
                       <button
                         key="cat-Tudo"
-                        onClick={() => setChipCategory(c)}
+                        onClick={() => { setChipCategory(c); bumpCategory(c, 0.8); }}
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
                             ? "text-white bg-[#141414] border-[#141414]"
@@ -976,7 +1124,7 @@ setProfile(null);
                     return (
                       <button
                         key={`cat-${c}`}
-                        onClick={() => setChipCategory(c)}
+                        onClick={() => { setChipCategory(c); bumpCategory(c, 0.8); }}
                         className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
                           active
                             ? "text-white bg-[#141414] border-[#141414]"
@@ -1094,31 +1242,36 @@ setProfile(null);
                     <div className="space-y-3">
                       <div className="text-xs text-gray-500">Selecione</div>
                       <div className="flex gap-2">
-                        {[
-                          { id: "female", label: "Feminino" },
-                          { id: "male", label: "Masculino" },
-                        ].map((g) => {
-                          const active = selectedGenders.has(
-                            g.id as "female" | "male"
-                          );
-                          return (
-                            <button
-                              key={g.id}
-                              onClick={() =>
-                                setSelectedGenders((s) =>
-                                  toggleInSet(s, g.id as "female" | "male")
-                                )
-                              }
-                              className={`h-10 px-4 rounded-full border text-sm ${
-                                active
-                                  ? "bg-[#141414] text-white border-[#141414]"
-                                  : "bg-white text-gray-800 border-gray-200"
-                              }`}
-                            >
-                              {g.label}
-                            </button>
-                          );
-                        })}
+                      {[
+  { id: "female", label: "Feminino" },
+  { id: "male", label: "Masculino" },
+].map((g) => {
+  const active = selectedGenders.has(
+    g.id as "female" | "male"
+  );
+  return (
+    <button
+      key={g.id}
+      onClick={() =>
+        setSelectedGenders((prev) => {
+          const wasActive = prev.has(g.id as "female" | "male");
+          const next = toggleInSet(prev, g.id as "female" | "male");
+          // só dá bump quando ATIVAR (marcar)
+          if (!wasActive) bumpGender(g.id as "female" | "male", 1.0);
+          return next;
+        })
+      }
+      className={`h-10 px-4 rounded-full border text-sm ${
+        active
+          ? "bg-[#141414] text-white border-[#141414]"
+          : "bg-white text-gray-800 border-gray-200"
+      }`}
+    >
+      {g.label}
+    </button>
+  );
+})}
+
                       </div>
                       {selectedGenders.size > 0 && (
                         <button
@@ -1142,9 +1295,10 @@ setProfile(null);
                           return (
                             <button
                               key={s}
-                              onClick={() =>
-                                setSelectedSizes((set) => toggleInSet(set, s))
-                              }
+                              onClick={() => {
+                                setSelectedSizes((set) => toggleInSet(set, s));
+                                bumpSize(s, 0.5);
+                              }}
                               className={`h-10 px-4 rounded-full border text-sm ${
                                 active
                                   ? "bg-[#141414] text-white border-[#141414]"
@@ -1210,12 +1364,18 @@ setProfile(null);
 
                 {/* footer */}
                 <div className="sticky bottom-0 bg-white border-t px-5 py-3">
-                  <button
-                    onClick={() => setFilterOpen(false)}
-                    className="w-full h-11 rounded-xl text-white text-sm font-medium bg-[#141414]"
-                  >
-                    Ver resultados
-                  </button>
+                <button
+  onClick={() => {
+    // dar pequenos bumps nos filtros atuais, reforçando o aprendizado
+    selectedCategories.forEach((c) => bumpCategory(c, 0.5));
+    selectedGenders.forEach((g) => bumpGender(g, 0.5));
+    selectedSizes.forEach((s) => bumpSize(s, 0.3));
+    setFilterOpen(false);
+  }}
+  className="w-full h-11 rounded-xl text-white text-sm font-medium bg-[#141414]"
+>
+  Ver resultados
+</button>
                 </div>
               </div>
             </div>
