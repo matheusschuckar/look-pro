@@ -11,10 +11,17 @@ type Product = {
   name: string;
   store_name: string;
   photo_url: string[] | string | null;
-  eta_text: string | null;
+
+  // novo (da VIEW)
+  eta_text_runtime?: string | null;
+
+  // legado (da tabela antiga)
+  eta_text?: string | null;
+
   price_tag: number;
   sizes: string[] | null;
 };
+
 
 type CommentView = {
   id: string;
@@ -94,16 +101,27 @@ export default function ProductPage() {
     };
   }, []);
 
-  // carregar produto + user
-  useEffect(() => {
-    (async () => {
-      try {
-        const pid = Number(id);
-        if (!pid) throw new Error("Produto inválido");
+  // carregar produto + user (tenta VIEW dinâmica, cai pra tabela antiga)
+useEffect(() => {
+  (async () => {
+    try {
+      const pid = Number(id);
+      if (!pid) throw new Error("Produto inválido");
 
-        const { data: u } = await supabase.auth.getUser();
-        setUserId(u?.user?.id ?? null);
+      const { data: u } = await supabase.auth.getUser();
+      setUserId(u?.user?.id ?? null);
 
+      // 1) tenta a VIEW com ETA dinâmico
+      let view = await supabase
+        .from("products_with_runtime_eta")
+        .select(
+          "id,name,store_name,photo_url,eta_text_runtime,eta_text,price_tag,sizes"
+        )
+        .eq("id", pid)
+        .maybeSingle();
+
+      // Se a view não existir ou não achar o produto, usa fallback
+      if (view.error || !view.data) {
         const { data, error } = await supabase
           .from("products")
           .select("id,name,store_name,photo_url,eta_text,price_tag,sizes")
@@ -111,13 +129,17 @@ export default function ProductPage() {
           .single();
         if (error) throw error;
         setProduct(data as Product);
-      } catch (e: any) {
-        setErr(e.message ?? "Erro ao carregar produto");
-      } finally {
-        setLoading(false);
+      } else {
+        setProduct(view.data as Product);
       }
-    })();
-  }, [id]);
+    } catch (e: any) {
+      setErr(e.message ?? "Erro ao carregar produto");
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, [id]);
+
 
   // 🔥 CONTADOR GLOBAL DE VIEWS: incrementa via RPC ao abrir a página
   useEffect(() => {
@@ -565,9 +587,9 @@ export default function ProductPage() {
               {formatBRL(product.price_tag)}
             </div>
             <div className="text-[11px] text-gray-500">
-              {product.eta_text ?? "até 1h"}
-            </div>
-          </div>
+  {product.eta_text_runtime ?? product.eta_text ?? "até 1h"}
+</div>
+ </div>
         </div>
 
         <div className="mt-2">
