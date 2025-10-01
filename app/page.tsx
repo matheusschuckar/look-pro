@@ -595,7 +595,21 @@ const filteredRanked = useMemo<Product[]>(() => {
     }}
     openFilter={() => setFilterOpen(true)}
     onBumpCategory={(c, w) => bumpCategory(c, w)}
-  />
+onToggleGender={(g) =>
+  setSelectedGenders((prev) => {
+    const wasActive = prev.has(g);
+    const next = new Set(prev);
+    if (wasActive) {
+      next.delete(g);
+    } else {
+      next.add(g);
+      bumpGender(g, 1.0); // reforça preferências quando ativa
+    }
+    return next;
+  })
+}
+/>
+
 )}
 
           {/* Modal de filtros */}
