@@ -6,7 +6,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import BottomNav from "../components/BottomNav";
+import ProductCard from "../components/ProductCard";
+import FiltersModal from "../components/FiltersModal";
+import ChipsRow from "../components/ChipsRow";
+import BannersCarousel from "../components/BannersCarousel";
+import {
+  EditorialTallBanner,
+  SelectionHeroBanner,
+  BannersTriplet,
+} from "../components/HomeBanners";
+import HeaderBar from "../components/HeaderBar";
+import AppDrawer from "../components/AppDrawer";
+import type { Product, Profile } from "@/lib/data/types";
+import { fetchCatalog } from "@/lib/data/catalog";
+import type { KeyStat } from "@/lib/prefs"; // para o tipo do norm()
+
+
 import {
   getPrefs,          // compat (usado por partes do código)
   getPrefsV2,        // novo
@@ -20,6 +35,19 @@ import {
   decayAll,
 } from "@/lib/prefs";
 import { getViewsMap } from "@/lib/metrics";
+import {
+  hasAddressBasics,
+  hasContact,
+  inCoverage,
+  intersects,
+  categoriesOf,
+  priceBucket,
+  etaBucket,
+} from "@/lib/ui/helpers";
+
+import { HOME_CAROUSEL, INLINE_BANNERS } from "@/lib/ui/homeContent";
+
+
 
 // ruído determinístico por produto + seed da sessão
 function noiseFor(id: number, seed: number) {
@@ -29,178 +57,6 @@ function noiseFor(id: number, seed: number) {
   x ^= x << 5; // xorshift32
   return (x >>> 0) / 4294967295; // 0..1
 }
-
-type Product = {
-  id: number;
-  name: string;
-  store_name: string;
-  photo_url: string[] | string | null;
-  price_tag: number;
-
-  // campos opcionais (vêm quando lermos a VIEW)
-  eta_text_runtime?: string | null;
-  store_id?: number | null;
-  store_slug?: string | null;
-
-  // legado (vêm quando lermos a tabela antiga)
-  eta_text?: string | null;
-
-  // o resto pode continuar opcional
-  category?: string | null;
-  gender?: "male" | "female" | null;
-  sizes?: string | string[] | null;
-  view_count?: number;
-  categories?: string[] | null;
-};
-
-
-type Profile = {
-  id: string;
-  name: string | null;
-  whatsapp: string | null;
-  street: string | null;
-  number: string | null;
-  complement: string | null;
-  city: string | null;
-  state?: string | null;
-  cep: string | null;
-  status: "waitlist" | "approved";
-};
-
-type Store = {
-  id: string;
-  name: string;
-  street: string | null;
-  number: string | null;
-  complement: string | null;
-  neighborhood: string | null;
-  city: string | null;
-  state: string | null;
-  cep: string | null;
-  lat: number | null;
-  lng: number | null;
-  contact_phone: string | null;
-};
-
-// helpers
-function isSPCity(city: string | null | undefined) {
-  const c = (city || "").toLowerCase();
-  return c.includes("são paulo") || c.includes("sao paulo");
-}
-function cepOk(cep: string | null | undefined) {
-  return (cep || "").replace(/\D/g, "").length === 8;
-}
-function hasAddressBasics(p: Profile | null) {
-  if (!p) return false;
-  return !!(p.street && p.number && cepOk(p.cep));
-}
-function hasContact(p: Profile | null) {
-  if (!p) return false;
-  return !!(p.name && p.whatsapp);
-}
-function inCoverage(p: Profile | null) {
-  if (!p) return false;
-  const cityOk = isSPCity(p.city);
-  const stateOk = (p.state || "").toUpperCase() === "SP";
-  return cityOk && stateOk;
-}
-function profileComplete(p: Profile | null) {
-  if (!p) return false;
-  return hasAddressBasics(p) && hasContact(p) && inCoverage(p);
-}
-function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
-  const next = new Set(set);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  return next;
-}
-function intersects<T>(a: Set<T>, arr: T[]): boolean {
-  for (const x of arr) if (a.has(x)) return true;
-  return false;
-}
-function formatBRL(v: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(v);
-}
-
-// Ex.: 159    -> "BRL 159"
-//     159.5  -> "BRL 159,50"
-//     159.99 -> "BRL 159,99"
-function formatBRLAlpha(v: number) {
-  const cents = Math.round(v * 100) % 100;
-  if (cents === 0) {
-    return `BRL ${Math.round(v).toLocaleString("pt-BR")}`;
-  }
-  return `BRL ${v.toFixed(2).replace(".", ",")}`;
-}
-
-function firstImage(x: string[] | string | null | undefined) {
-  return Array.isArray(x) ? x[0] ?? "" : x ?? "";
-}
-
-// 👇 Une category (string) + categories (array) e retorna sempre em minúsculas, sem duplicatas
-function categoriesOf(p: Product): string[] {
-  const one = (p.category || "").trim().toLowerCase();
-  const many = (p.categories || []).map((c) => (c || "").trim().toLowerCase());
-  const all = (one ? [one] : []).concat(many);
-  return Array.from(new Set(all.filter(Boolean)));
-}
-
-// ===== Buckets de preço e ETA (grossos, mas eficazes) =====
-function priceBucket(v: number): string {
-  if (v < 200) return "low|0-199";
-  if (v < 500) return "mid|200-499";
-  return "high|500+";
-}
-function etaBucket(txt?: string | null): string {
-  // heurística simples: procure minutos no texto "até 1h", "30-60 min", "2h"
-  const s = (txt || "").toLowerCase();
-  // prioridade por minutos explícitos
-  const m = s.match(/(\d+)\s*(min|mins|minutos)/);
-  if (m) {
-    const mins = Number(m[1] || 0);
-    if (mins <= 60) return "quick|<=60";
-    if (mins <= 120) return "std|<=120";
-    return "long|>120";
-  }
-  // horas
-  const h = s.match(/(\d+)\s*h/);
-  if (h) {
-    const hrs = Number(h[1] || 0);
-    if (hrs <= 1) return "quick|<=60";
-    if (hrs <= 2) return "std|<=120";
-    return "long|>120";
-  }
-  // fallback
-  return "std|<=120";
-}
-
-async function fetchCatalog() {
-  // 1) tenta a VIEW com ETA dinâmico por loja
-  let r = await supabase
-    .from("products_with_eta")
-    .select(
-      "id,name,store_name,photo_url,eta_text_runtime,price_tag,sizes,store_id,store_slug"
-    )
-    .limit(60);
-
-  if (!r.error) return (r.data || []) as Product[];
-
-  // 2) fallback: tabela antiga (mantém tudo funcionando)
-  const r2 = await supabase
-    .from("products")
-    .select(
-      "id,name,store_name,photo_url,eta_text,price_tag,category,gender,sizes,view_count,categories"
-    )
-    .eq("is_active", true)
-    .limit(60);
-
-  if (r2.error) throw r2.error;
-  return (r2.data || []) as Product[];
-}
-
 
 export default function Home() {
   const router = useRouter();
@@ -242,53 +98,9 @@ export default function Home() {
     };
   }, [drawerOpen, filterOpen]);
 
-  // Banners
-  const banners = useMemo(
-    () => [
-      {
-        title: "Moda em minutos",
-        subtitle: [
-          "O primeiro delivery de moda do mundo",
-          "com curadoria de excelência e entrega rápida",
-        ],
-        image:
-          "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Brunello-Cucinelli-Portofino-Summer-2023-Couples-Outfits.jpg",
-        href: "/collections/sobre",
-      },
-    ],
-    []
-  );
-  const [currentBanner, setCurrentBanner] = useState(0);
-  useEffect(() => {
-    if (banners.length <= 1) return; // 👈 evita autoplay com 1 banner
-    const id = setInterval(
-      () => setCurrentBanner((p) => (p + 1) % banners.length),
-      5500
-    );
-    return () => clearInterval(id);
-  }, [banners.length]);
+  // Banners (config movida para lib/ui/homeContent)
+const banners = HOME_CAROUSEL;
 
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.changedTouches[0].clientX;
-    touchEndX.current = null;
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.changedTouches[0].clientX;
-  };
-  const onTouchEnd = () => {
-    if (touchStartX.current === null || touchEndX.current === null) return;
-    const delta = touchEndX.current - touchStartX.current;
-    const threshold = 40;
-    if (delta > threshold) {
-      setCurrentBanner((p) => (p - 1 + banners.length) % banners.length);
-    } else if (delta < -threshold) {
-      setCurrentBanner((p) => (p + 1) % banners.length);
-    }
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
 
   // ===========================
   // Auth + Data unified (catálogo para todos, sem redirecionar guest)
@@ -351,10 +163,6 @@ setProfile(null);
     return Array.from(set).sort();
   }, [products]);
 
-  const chipCategories = useMemo(
-    () => ["Tudo", ...dynamicCategories],
-    [dynamicCategories]
-  );
   const allCategories = dynamicCategories; // compat com o restante do código
 
   const [chipCategory, setChipCategory] = useState<string>("Tudo");
@@ -372,14 +180,6 @@ setProfile(null);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
     new Set()
   );
-
-  const sizesList: Array<"PP" | "P" | "M" | "G" | "GG"> = [
-    "PP",
-    "P",
-    "M",
-    "G",
-    "GG",
-  ];
 
   const clearFilters = () => {
     setSelectedGenders(new Set());
@@ -592,41 +392,6 @@ const filteredRanked = useMemo<Product[]>(() => {
       router.replace("/");
     }
   }
-  // ===== Helpers para intercalar produtos e banners =====
-
-  // imagens/links dos banners do feed — troque as URLs quando quiser
-  const inlineBanners = {
-    editorialTall: {
-      href: "/collections/editorial",
-      image:
-        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/NEW%20IN%20LOUIS%20VUITTON-3.png", // TROCAR
-      alt: "Editorial da marca",
-    },
-    selectionHero: {
-      href: "/collections/fasano",
-      image:
-        "https://kuaoqzxqraeioqyhmnkw.supabase.co/storage/v1/object/public/product-images/Untitled%20(448%20x%20448%20px)-4.png",
-      alt: "selecao fasano",
-    },
-    landscapeTriplet: [
-      {
-        href: "/collections/nova-colecao",
-        image: "https://via.placeholder.com/800x200?text=Banner+1", // TROCAR
-        alt: "Nova coleção",
-      },
-      {
-        href: "/collections/occasions",
-        image: "https://via.placeholder.com/800x200?text=Banner+2", // TROCAR
-        alt: "Ocasiões",
-      },
-      {
-        href: "/collections/essentials",
-        image: "https://via.placeholder.com/800x200?text=Banner+3", // TROCAR
-        alt: "Essenciais",
-      },
-    ],
-  } as const;
-
     // agenda uma tarefa fora do ciclo de render (evita re-render na batida do clique)
     const idle = (cb: () => void) => {
       const ric: any =
@@ -661,58 +426,7 @@ const filteredRanked = useMemo<Product[]>(() => {
   
 
   // card de produto reaproveitando seu JSX atual
-  function ProductCard({ p }: { p: Product }) {
-    return (
-      <Link
-  href={`/product/${p.id}`}
-  prefetch
-  onMouseEnter={() => router.prefetch(`/product/${p.id}`)}
-  onClick={() => {
-    // agenda a gravação fora do ciclo de render (sem reordenar a Home antes da navegação)
-    idle(() => recordInteraction(p));
-    // deixa o <Link> navegar imediatamente
-  }}
-  className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
->
-
-        <div className="relative h-44">
-          <span className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border bg-[#141414] border-[#141414]">
-            {formatBRLAlpha(p.price_tag)}
-          </span>
-          <img
-            src={firstImage(p.photo_url)}
-            alt={p.name}
-            className="w-full h-44 object-cover"
-            loading="lazy"
-            decoding="async"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = "/fallback.jpg";
-            }}
-          />
-        </div>
-
-        <div className="p-3">
-          {(() => {
-            const mainCat = categoriesOf(p)[0];
-            return mainCat ? (
-              <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-0.5">
-                {mainCat}
-              </p>
-            ) : null;
-          })()}
-
-          <p className="text-sm font-semibold leading-tight line-clamp-2">
-            {p.name}
-          </p>
-          <p className="text-xs text-gray-500">{p.store_name}</p>
-         <p className="text-xs text-gray-400">
-  {p.eta_text_runtime ?? p.eta_text ?? "até 1h"}
-</p>
-
-        </div>
-      </Link>
-    );
-  }
+  
   // ===== fim dos helpers =====
 
   // Render
@@ -722,107 +436,18 @@ const filteredRanked = useMemo<Product[]>(() => {
       style={{ backgroundColor: "var(--background)" }}
     >
       {/* Header com faixa marrom (refinado) */}
-      <div className="-mx-5 px-5 relative z-0 mb-7">
-        {/* Fundo marrom, com canto inferior arredondado e um pouco mais alto */}
-
-        {/* Conteúdo do header sobre o fundo */}
-        <div className="relative z-10 pt-6 flex items-start justify-between">
-          <div>
-            {/* Título em tom claro e elegante */}
-            <h1 className="text-[32px] leading-8 font-bold tracking-tight text-black">
-              Look
-            </h1>
-            <p className="mt-1 text-[13px] text-black">
-              Ready to wear in minutes
-            </p>
-          </div>
-
-          {/* Botão de Login / Menu, conversando com o fundo marrom */}
-          {!loading && !profile ? (
-            <Link
-              href="/auth"
-              className="mt-1 inline-flex items-center rounded-full border px-4 h-9 text-sm font-medium transition bg-transparent text-[#141414] border-[#141414] hover:bg-[#141414]/10"
-            >
-              Login
-            </Link>
-          ) : (
-            <button
-              onClick={() => setDrawerOpen(true)}
-              className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border bg-transparent text-[#141414] border-[#141414] hover:bg-[#141414]/10 active:scale-[0.98] transition"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                className="text-black"
-              >
-                <path
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
-      </div>
+      <HeaderBar
+  loading={loading}
+  profile={profile}
+  onOpenMenu={() => setDrawerOpen(true)}
+/>
 
       {/* Drawer */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-[70]">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setDrawerOpen(false)}
-          />
-          <div className="absolute right-0 top-0 bottom-0 w-72 shadow-xl flex flex-col bg-[#141414] text-white">
-            <div className="flex items-center justify-between px-4 h-14 border-b border-white/10">
-              <span className="font-semibold">Menu</span>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-white/10"
-                aria-label="Fechar"
-                title="Fechar"
-              >
-                ✕
-              </button>
-            </div>
-            <nav className="flex-1 px-4 py-4 text-sm">
-              <ul className="space-y-3">
-                <li>
-                  <Link href="/profile" onClick={() => setDrawerOpen(false)}>
-                    Perfil
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/orders" onClick={() => setDrawerOpen(false)}>
-                    Pedidos
-                  </Link>
-                </li>
-                <li>
-                  <a
-                    href="https://wa.me/5511966111233"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setDrawerOpen(false)}
-                  >
-                    Suporte
-                  </a>
-                </li>
-              </ul>
-            </nav>
-            <div className="border-t p-4 border-white/10">
-              <button
-                onClick={handleLogout}
-                className="w-full text-left text-red-600 hover:underline"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AppDrawer
+  open={drawerOpen}
+  onClose={() => setDrawerOpen(false)}
+  onLogout={handleLogout}
+/>
 
       {/* Cards de orientação — apenas para logado */}
       {profile && !hasAddressBasics(profile) && (
@@ -952,454 +577,51 @@ const filteredRanked = useMemo<Product[]>(() => {
       )}
 
       {/* Banner carrossel — liberado para todos */}
-      {!loading && (
-        <div className="mt-4 overflow-hidden rounded-3xl relative">
-          <div
-            className="relative h-60 w-full"
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-          >
-            {banners.map((b, i) => (
-              <Link
-                href={b.href}
-                key={i}
-                className={`absolute inset-0 transition-opacity duration-700 ${
-                  i === currentBanner
-                    ? "opacity-100 pointer-events-auto"
-                    : "opacity-0 pointer-events-none"
-                }`}
-                aria-label={`${b.title} — ${
-                  Array.isArray(b.subtitle) ? b.subtitle.join(" ") : b.subtitle
-                }`}
-              >
-                <div className="absolute inset-0">
-                  <img
-                    src={b.image}
-                    alt={b.title}
-                    className="absolute inset-0 h-full w-full object-cover object-center"
-                  />
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-tr from-black/50 via-black/10 to-transparent" />
-                <div className="absolute left-4 bottom-4 right-4 text-white drop-shadow">
-                  <div className="text-[22px] font-bold leading-6">
-                    {b.title}
-                  </div>
-                  <div className="text-[13px] opacity-90 font-semibold">
-                    {Array.isArray(b.subtitle)
-                      ? b.subtitle.map((line, i) => (
-                          <span key={i}>
-                            {line}
-                            {i < b.subtitle.length - 1 && <br />}
-                          </span>
-                        ))
-                      : b.subtitle}
-                  </div>
-                </div>
-              </Link>
-            ))}
-            {banners.length > 1 && (
-              <button
-                type="button"
-                aria-label="Anterior"
-                onClick={() =>
-                  setCurrentBanner(
-                    (p) => (p - 1 + banners.length) % banners.length
-                  )
-                }
-                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
-              >
-                ...
-              </button>
-            )}
-
-            {banners.length > 1 && (
-              <button
-                type="button"
-                aria-label="Próximo"
-                onClick={() =>
-                  setCurrentBanner((p) => (p + 1) % banners.length)
-                }
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/35 text-white flex items-center justify-center backdrop-blur-sm active:scale-95"
-              >
-                ...
-              </button>
-            )}
-
-            <div
-              className={`absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 ${
-                banners.length <= 1 ? "hidden" : ""
-              }`}
-            >
-              {banners.map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    i === currentBanner ? "bg-white" : "bg-white/50"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {!loading && <BannersCarousel banners={banners} />}
 
       {/* Chips / Filtros — liberados para todos */}
       {!loading && (
-        <>
-          {anyActiveFilter ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {[...selectedCategories].map((c) => (
-                <span
-                  key={`c-${c}`}
-                  className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]"
-                >
-                  {c}
-                </span>
-              ))}
-              {selectedCategories.size === 0 && chipCategory !== "Tudo" && (
-                <span className="px-3 h-9 rounded-full border text-sm capitalize bg-[#141414] text-white border-[#141414]">
-                  {chipCategory}
-                </span>
-              )}
-              {[...selectedGenders].map((g) => (
-                <span
-                  key={`g-${g}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
-                >
-                  {g === "female" ? "Feminino" : "Masculino"}
-                </span>
-              ))}
-              {[...selectedSizes].map((s) => (
-                <span
-                  key={`s-${s}`}
-                  className="px-3 h-9 rounded-full border text-sm bg-[#141414] text-white border-[#141414]"
-                >
-                  {s}
-                </span>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  clearFilters();
-                  setChipCategory("Tudo");
-                }}
-                className="px-3 h-9 rounded-full border text-sm bg-white text-gray-800 border-gray-200 hover:bg-gray-50"
-              >
-                Limpar tudo
-              </button>
-            </div>
-          ) : (
-            <div className="mt-3 flex items-center justify-between">
-              <div className="overflow-x-auto no-scrollbar -ml-1 pr-2">
-                <div className="flex gap-2 pl-1">
-                  {/* 1) TUDO primeiro */}
-                  {(() => {
-                    const c = "Tudo";
-                    const active = chipCategory === c;
-                    return (
-                      <button
-                        key="cat-Tudo"
-                        onClick={() => { setChipCategory(c); bumpCategory(c, 0.8); }}
-                        className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
-                          active
-                            ? "text-white bg-[#141414] border-[#141414]"
-                            : "surface border-warm text-gray-800 hover:opacity-95"
-                        }`}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })()}
-
-                  {/* 2) GÊNERO antes das demais categorias */}
-                  {[
-                    { id: "female" as const, label: "Feminino" },
-                    { id: "male" as const, label: "Masculino" },
-                  ].map((g) => {
-                    const active = selectedGenders.has(g.id);
-                    return (
-                      <button
-                        key={`gender-${g.id}`}
-                        onClick={() =>
-                          setSelectedGenders((s) => toggleInSet(s, g.id))
-                        }
-                        className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
-                          active
-                            ? "text-white bg-[#141414] border-[#141414]"
-                            : "surface border-warm text-gray-800 hover:opacity-95"
-                        }`}
-                        aria-pressed={active}
-                      >
-                        {g.label}
-                      </button>
-                    );
-                  })}
-
-                  {/* 3) Demais categorias (sem o "Tudo") */}
-                  {allCategories.map((c) => {
-                    const active = chipCategory === c;
-                    return (
-                      <button
-                        key={`cat-${c}`}
-                        onClick={() => { setChipCategory(c); bumpCategory(c, 0.8); }}
-                        className={`px-3 h-9 rounded-full border text-sm whitespace-nowrap transition ${
-                          active
-                            ? "text-white bg-[#141414] border-[#141414]"
-                            : "surface border-warm text-gray-800 hover:opacity-95"
-                        }`}
-                      >
-                        {c[0].toUpperCase() + c.slice(1)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setFilterOpen(true)}
-                className="ml-2 inline-flex items-center gap-1 h-9 px-3 rounded-full border text-sm border-[#141414] text-[#141414] hover:bg-[#141414]/10"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                >
-                  <path
-                    d="M3 6h18M7 12h10M10 18h4"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Filter
-              </button>
-            </div>
-          )}
+  <ChipsRow
+    anyActiveFilter={anyActiveFilter}
+    chipCategory={chipCategory}
+    setChipCategory={setChipCategory}
+    selectedCategories={selectedCategories}
+    selectedGenders={selectedGenders}
+    selectedSizes={selectedSizes}
+    allCategories={allCategories}
+    clearFilters={() => {
+      clearFilters();
+      setChipCategory("Tudo");
+    }}
+    openFilter={() => setFilterOpen(true)}
+    onBumpCategory={(c, w) => bumpCategory(c, w)}
+  />
+)}
 
           {/* Modal de filtros */}
-          {filterOpen && (
-            <div className="fixed inset-0 z-[70]">
-              <div
-                className="absolute inset-0 bg-black/30"
-                onClick={() => setFilterOpen(false)}
-              />
-              <div className="absolute inset-x-0 top-0 bottom-0 bg-white rounded-t-3xl shadow-xl flex flex-col">
-                {/* header */}
-                <div className="sticky top-0 bg-white z-10 border-b">
-                  <div className="flex items-center justify-between px-5 h-14">
-                    <button
-                      className="h-9 w-9 -ml-2 flex items-center justify-center rounded-full hover:bg-gray-100"
-                      onClick={() => setFilterOpen(false)}
-                      aria-label="Fechar"
-                    >
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                      >
-                        <path
-                          d="M15 18l-6-6 6-6"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                    <div className="text-sm font-semibold tracking-wide">
-                      FILTROS
-                    </div>
-                    <button
-                      className="text-sm text-gray-600 hover:underline"
-                      onClick={() => {
-                        clearFilters();
-                        setChipCategory("Tudo");
-                      }}
-                    >
-                      Limpar
-                    </button>
-                  </div>
-
-                  {/* tabs */}
-                  <div className="px-5">
-                    <div
-                      className="flex gap-6 text-sm"
-                      role="tablist"
-                      aria-label="Filtros"
-                    >
-                      {[
-                        { id: "genero", label: "Gênero" },
-                        { id: "tamanho", label: "Tamanho" },
-                        { id: "categorias", label: "Categorias" },
-                      ].map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => setActiveTab(t.id as typeof activeTab)}
-                          role="tab"
-                          aria-selected={activeTab === t.id}
-                          className={`pb-3 -mb-px ${
-                            activeTab === t.id
-                              ? "text-[#141414] border-b-2 border-[#141414]"
-                              : "text-gray-500"
-                          }`}
-                        >
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* content */}
-                <div className="flex-1 overflow-y-auto px-5 pt-4">
-                  {activeTab === "genero" && (
-                    <div className="space-y-3">
-                      <div className="text-xs text-gray-500">Selecione</div>
-                      <div className="flex gap-2">
-                      {[
-  { id: "female", label: "Feminino" },
-  { id: "male", label: "Masculino" },
-].map((g) => {
-  const active = selectedGenders.has(
-    g.id as "female" | "male"
-  );
-  return (
-    <button
-      key={g.id}
-      onClick={() =>
-        setSelectedGenders((prev) => {
-          const wasActive = prev.has(g.id as "female" | "male");
-          const next = toggleInSet(prev, g.id as "female" | "male");
-          // só dá bump quando ATIVAR (marcar)
-          if (!wasActive) bumpGender(g.id as "female" | "male", 1.0);
-          return next;
-        })
-      }
-      className={`h-10 px-4 rounded-full border text-sm ${
-        active
-          ? "bg-[#141414] text-white border-[#141414]"
-          : "bg-white text-gray-800 border-gray-200"
-      }`}
-    >
-      {g.label}
-    </button>
-  );
-})}
-
-                      </div>
-                      {selectedGenders.size > 0 && (
-                        <button
-                          className="text-xs text-gray-600 underline"
-                          onClick={() => setSelectedGenders(new Set())}
-                        >
-                          limpar seleção
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {activeTab === "tamanho" && (
-                    <div className="space-y-3">
-                      <div className="text-xs text-gray-500">
-                        Selecione um ou mais tamanhos
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {(["PP", "P", "M", "G", "GG"] as const).map((s) => {
-                          const active = selectedSizes.has(s);
-                          return (
-                            <button
-                              key={s}
-                              onClick={() => {
-                                setSelectedSizes((set) => toggleInSet(set, s));
-                                bumpSize(s, 0.5);
-                              }}
-                              className={`h-10 px-4 rounded-full border text-sm ${
-                                active
-                                  ? "bg-[#141414] text-white border-[#141414]"
-                                  : "bg-white text-gray-800 border-gray-200"
-                              }`}
-                            >
-                              {s}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {selectedSizes.size > 0 && (
-                        <button
-                          className="text-xs text-gray-600 underline"
-                          onClick={() => setSelectedSizes(new Set())}
-                        >
-                          limpar seleção
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {activeTab === "categorias" && (
-                    <div className="space-y-3">
-                      <div className="text-xs text-gray-500">
-                        Marque quantas quiser
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {allCategories.map((c) => {
-                          const key = c.toLowerCase();
-                          const active = selectedCategories.has(key);
-                          return (
-                            <button
-                              key={key}
-                              onClick={() =>
-                                setSelectedCategories((set) =>
-                                  toggleInSet(set, key)
-                                )
-                              }
-                              className={`h-10 px-4 rounded-full border text-sm capitalize ${
-                                active
-                                  ? "bg-[#141414] text-white border-[#141414]"
-                                  : "bg-white text-gray-800 border-gray-200"
-                              }`}
-                            >
-                              {c}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {selectedCategories.size > 0 && (
-                        <button
-                          className="text-xs text-gray-600 underline"
-                          onClick={() => setSelectedCategories(new Set())}
-                        >
-                          limpar seleção
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  <div className="h-24" />
-                </div>
-
-                {/* footer */}
-                <div className="sticky bottom-0 bg-white border-t px-5 py-3">
-                <button
-  onClick={() => {
-    // dar pequenos bumps nos filtros atuais, reforçando o aprendizado
-    selectedCategories.forEach((c) => bumpCategory(c, 0.5));
-    selectedGenders.forEach((g) => bumpGender(g, 0.5));
-    selectedSizes.forEach((s) => bumpSize(s, 0.3));
-    setFilterOpen(false);
-  }}
-  className="w-full h-11 rounded-xl text-white text-sm font-medium bg-[#141414]"
->
-  Ver resultados
-</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
+          <FiltersModal
+            open={filterOpen}
+            onClose={() => setFilterOpen(false)}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            allCategories={allCategories}
+            selectedGenders={selectedGenders}
+            setSelectedGenders={setSelectedGenders}
+            selectedSizes={selectedSizes}
+            setSelectedSizes={setSelectedSizes}
+            selectedCategories={selectedCategories}
+            setSelectedCategories={setSelectedCategories}
+            clearAll={() => {
+              clearFilters();
+              setChipCategory("Tudo");
+            }}
+            onApply={() => {
+              selectedCategories.forEach((c) => bumpCategory(c, 0.5));
+              selectedGenders.forEach((g) => bumpGender(g, 0.5));
+              selectedSizes.forEach((s) => bumpSize(s, 0.3));
+              setFilterOpen(false);
+            }}
+          />
 
       {/* Grid de produtos — com banners intercalados */}
       {!loading && (
@@ -1412,80 +634,47 @@ const filteredRanked = useMemo<Product[]>(() => {
             // helper para empurrar N produtos
             const pushProducts = (count: number) => {
               for (let k = 0; k < count && i < list.length; k++, i++) {
-                items.push(<ProductCard key={`p-${list[i].id}`} p={list[i]} />);
+                items.push(
+                  <ProductCard
+                    key={`p-${list[i].id}`}
+                    p={list[i]}
+                    onTap={(p) => idle(() => recordInteraction(p))}
+                  />
+                );                
               }
-            };
+            }; 
 
             // 1) 2 linhas x 2 colunas = 4 produtos
             pushProducts(4);
 
             // 2) banner retangular com altura maior (editorial), largura total
-            items.push(
-              <Link
-                key="banner-editorialTall"
-                href={inlineBanners.editorialTall.href}
-                className="col-span-2 rounded-3xl overflow-hidden relative"
-                aria-label={inlineBanners.editorialTall.alt}
-              >
-                <img
-                  src={inlineBanners.editorialTall.image}
-                  alt={inlineBanners.editorialTall.alt}
-                  className="w-full h-[560px] object-cover object-center"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </Link>
-            );
+items.push(
+  <EditorialTallBanner
+    key="banner-editorialTall"
+    banner={INLINE_BANNERS.editorialTall}
+  />
+);
 
             // 3) mais 4 produtos
             pushProducts(4);
 
             // 4) banner Fasano (quadrado, sem corte e com borda igual aos demais)
-            items.push(
-              <Link
-                key="banner-selectionHero"
-                href={inlineBanners.selectionHero.href}
-                className="col-span-2 rounded-3xl overflow-hidden relative aspect-square bg-white"
-                aria-label={inlineBanners.selectionHero.alt}
-              >
-                {/* imagem inteira, sem corte */}
-                <img
-                  src={inlineBanners.selectionHero.image}
-                  alt={inlineBanners.selectionHero.alt}
-                  className="absolute inset-0 w-full h-full object-contain"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </Link>
-            );
-
+items.push(
+  <SelectionHeroBanner
+    key="banner-selectionHero"
+    banner={INLINE_BANNERS.selectionHero}
+  />
+);
             // 5) mais 4 produtos
             pushProducts(4);
 
             // 6) três banners baixos, landscape, na mesma linha
-            items.push(
-              <div
-                key="banner-triplet"
-                className="col-span-2 grid grid-cols-3 gap-3"
-              >
-                {inlineBanners.landscapeTriplet.map((b, idx) => (
-                  <Link
-                    key={`land-${idx}`}
-                    href={b.href}
-                    className="rounded-2xl overflow-hidden relative"
-                    aria-label={b.alt}
-                  >
-                    <img
-                      src={b.image}
-                      alt={b.alt}
-                      className="w-full h-28 object-cover object-center"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </Link>
-                ))}
-              </div>
-            );
+items.push(
+  <BannersTriplet
+    key="banner-triplet"
+    items={INLINE_BANNERS.landscapeTriplet}
+  />
+);
 
             // 7) segue com os produtos restantes
             pushProducts(Number.MAX_SAFE_INTEGER);
