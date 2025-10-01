@@ -5,11 +5,11 @@ import type { Product } from "./types";
 export async function fetchCatalog(): Promise<Product[]> {
   // 1) tenta a VIEW com ETA dinâmico por loja
   let r = await supabase
-    .from("products_with_eta")
-    .select(
-      "id,name,store_name,photo_url,eta_text_runtime,price_tag,sizes,store_id,store_slug"
-    )
-    .limit(60);
+  .from("products_with_eta")
+  .select(
+    "id,name,store_name,photo_url,eta_text_runtime,price_tag,sizes,store_id,store_slug,category,gender,categories"
+  )
+  .limit(60);
 
   if (!r.error) return (r.data || []) as Product[];
 
