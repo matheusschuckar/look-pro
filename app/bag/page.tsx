@@ -87,13 +87,24 @@ type Profile = {
   id: string;
   email: string | null;
   name: string | null;
-  whatsapp: string | null;
+  whatsapp: string | null; // E.164 sem '+'
   street: string | null;
   number: string | null;
   complement: string | null;
-  cep: string | null;
+  bairro?: string | null;
   city: string | null;
+  state?: string | null;
+  cep: string | null;
+  cpf?: string | null;
 };
+
+// ===== helpers de validação iguais ao Profile =====
+function onlyDigits(v: string) {
+  return (v || "").replace(/\D/g, "");
+}
+function cepValid(cep: string) {
+  return onlyDigits(cep).length === 8;
+}
 
 function BagPageInner() {
   const [items, setItems] = useState<BagItem[]>([]);
@@ -103,6 +114,18 @@ function BagPageInner() {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const router = useRouter();
   const search = useSearchParams();
+
+  // controle de etapas
+  const [step, setStep] = useState<"review" | "confirm" | "pix">("review");
+
+  // estado de edição de endereço (inicialmente copia do perfil)
+  const [street, setStreet] = useState("");
+  const [number, setNumber] = useState("");
+  const [complement, setComplement] = useState("");
+  const [neighborhood, setNeighborhood] = useState(""); // bairro
+  const [stateUf, setStateUf] = useState("SP");
+  const [city, setCity] = useState("");
+  const [cep, setCep] = useState("");
 
   // PIX mostrado após criar pedido
   const [pixCode, setPixCode] = useState<string | null>(null);
@@ -119,13 +142,18 @@ function BagPageInner() {
         const { data: u } = await supabase.auth.getUser();
         const user = u?.user;
         if (!user) return;
+
         const { data: p, error } = await supabase
           .from("user_profiles")
-          .select("id,name,whatsapp,street,number,complement,cep,city")
+          .select(
+            "id,name,whatsapp,street,number,complement,bairro,city,state,cep,cpf"
+          )
           .eq("id", user.id)
           .single();
+
         if (error) throw error;
-        setProfile({
+
+        const prof: Profile = {
           id: user.id,
           email: user.email || null,
           name: (p as any)?.name ?? null,
@@ -133,26 +161,38 @@ function BagPageInner() {
           street: (p as any)?.street ?? null,
           number: (p as any)?.number ?? null,
           complement: (p as any)?.complement ?? null,
-          cep: (p as any)?.cep ?? null,
+          bairro: (p as any)?.bairro ?? null,
           city: (p as any)?.city ?? null,
-        });
+          state: (p as any)?.state ?? null,
+          cep: (p as any)?.cep ?? null,
+          cpf: (p as any)?.cpf ?? null,
+        };
+        setProfile(prof);
+
+        // preenche o formulário de endereço com o perfil
+        setStreet(prof.street ?? "");
+        setNumber(prof.number ?? "");
+        setComplement(prof.complement ?? "");
+        setNeighborhood(prof.bairro ?? "");
+        setCity(prof.city ?? "");
+        setStateUf((prof.state as string) ?? "SP");
+        setCep(prof.cep ?? "");
       } catch (e: any) {
         setErr(e.message ?? "Erro ao carregar perfil");
       }
     })();
   }, []);
 
-  // Auto-checkout: se voltou do auth com checkout=1, dispara o pagamento
+  // Se veio com ?checkout=1 → vai para etapa de confirmação (e não gera PIX direto)
   useEffect(() => {
     const wantsCheckout = search?.get("checkout") === "1";
     if (!wantsCheckout) return;
-    if (creating || pixCode) return;
     if (items.length === 0) return;
-    // espera o profile carregar para ter email
-    if (!profile?.email) return;
-    handleCheckout();
+    // espera o profile carregar para preencher form
+    if (!profile?.id) return;
+    setStep("confirm");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, profile?.email, items.length, creating, pixCode]);
+  }, [search, profile?.id, items.length]);
 
   function handleQty(i: number, q: number) {
     setItems(updateQty(i, Math.max(1, q)));
@@ -173,104 +213,150 @@ function BagPageInner() {
   const delivery = items.length > 0 ? DELIVERY_FEE * uniqueStores.length : 0;
   const total = items.length > 0 ? subtotal + delivery : 0;
 
-  async function handleCheckout() {
-  try {
-    setErr(null);
-    setOkMsg(null);
+  // salva o endereço EDITADO no user_profiles (atualiza o perfil oficial)
+  async function saveAddressToProfile() {
+    if (!profile?.id) return;
 
-    if (items.length === 0) {
-      setErr("Sua sacola está vazia.");
-      return;
+    // validações mínimas (iguais às do Profile)
+    if (!cepValid(cep)) {
+      throw new Error("CEP inválido. Use 8 dígitos.");
     }
-
-    // 1) Checa sessão SEM rodeios
-    const { data: u } = await supabase.auth.getUser();
-    const sessionUser = u?.user ?? null;
-
-    if (!sessionUser) {
-      // sem login → vai pro auth e volta pro PIX automaticamente
-      router.replace(`/auth?next=${encodeURIComponent("/bag?checkout=1#pix")}`);
-      return;
+    if (!street.trim() || !number.trim() || !neighborhood.trim() || !city.trim()) {
+      throw new Error("Preencha rua, número, bairro e cidade.");
     }
+    const payload = {
+      id: profile.id,
+      street: street.trim(),
+      number: number.trim(),
+      complement: (complement || "").trim(),
+      bairro: neighborhood.trim(),
+      city: city.trim(),
+      state: (stateUf || "SP").toUpperCase(),
+      cep: onlyDigits(cep),
+    };
+    const { error } = await supabase
+      .from("user_profiles")
+      .upsert(payload, { onConflict: "id" });
 
-    // 2) Garante e-mail (usa o do user ou do perfil como fallback)
-    const email = sessionUser.email || profile?.email || null;
-    if (!email) {
-      // logado mas faltando dados → vai pro profile e volta pro PIX
-      router.replace(`/profile?next=${encodeURIComponent("/bag?checkout=1#pix")}`);
-      return;
-    }
+    if (error) throw error;
 
-    // 3) PIX config
-    const key = (process.env.NEXT_PUBLIC_PIX_KEY || "").replace(/\D/g, "");
-    const merchant = (process.env.NEXT_PUBLIC_PIX_MERCHANT || "LOOK PAGAMENTOS").toUpperCase();
-    const city = (process.env.NEXT_PUBLIC_PIX_CITY || "SAO PAULO").toUpperCase();
-    if (!key) {
-      setErr("Chave PIX não configurada.");
-      return;
-    }
-
-    const { subtotal } = bagTotals(items);
-    const uniqueStores = Array.from(new Set(items.map((it) => it.store_name)));
-    const delivery = items.length > 0 ? DELIVERY_FEE * uniqueStores.length : 0;
-    const total = items.length > 0 ? subtotal + delivery : 0;
-
-    const txid = `LOOK${Date.now()}`.slice(0, 25);
-    const payload = buildPix({ key, merchant, city, amount: total, txid });
-
-    // resumo dos itens para Notes
-    const itemsSummary = items
-      .map(
-        (it) =>
-          `• ${it.name} (${it.size}) — ${it.store_name} — x${it.qty} — R$ ${(
-            it.unit_price * it.qty
-          ).toFixed(2)}`
-      )
-      .join("\n");
-
-    setCreating(true);
-
-    await createOrder({
-      Status: "Aguardando Pagamento",
-
-      Name: profile?.name || "",
-      "User Email": email,
-      "User WhatsApp": profile?.whatsapp || "",
-      Street: profile?.street || "",
-      Number: profile?.number || "",
-      Complement: profile?.complement || "",
-      CEP: profile?.cep || "",
-      City: profile?.city || "São Paulo",
-
-      "Item Price": Number(subtotal.toFixed(2)),
-      "Delivery Fee": Number(delivery.toFixed(2)),
-      Total: Number(total.toFixed(2)),
-
-      "Product ID": items.map((it) => String(it.product_id)).join(", "),
-      "Product Name": items.map((it) => it.name).join(" | "),
-      "Store Name": items.map((it) => it.store_name).join(", "),
-      Size: items.map((it) => it.size).join(", "),
-
-      Notes: `Items:\n${itemsSummary}\n\nLojas distintas: ${uniqueStores.length}\nTXID: ${txid}`,
-      "PIX Code": payload,
-    });
-
-    setPixCode(payload);
-    setOkMsg("Pedido criado! Pague via PIX para prosseguir.");
-
-    // rola até a seção do PIX
-    setTimeout(() => {
-      if (typeof window !== "undefined") {
-        const el = document.querySelector("#pix-section");
-        el?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 50);
-  } catch (e: any) {
-    setErr(e.message ?? "Erro ao criar pedido");
-  } finally {
-    setCreating(false);
+    // atualiza o estado local do perfil para refletir o que foi salvo
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            street: payload.street,
+            number: payload.number,
+            complement: payload.complement,
+            bairro: payload.bairro,
+            city: payload.city,
+            state: payload.state,
+            cep: payload.cep,
+          }
+        : prev
+    );
   }
-}
+
+  async function handleCheckout() {
+    try {
+      setErr(null);
+      setOkMsg(null);
+
+      if (items.length === 0) {
+        setErr("Sua sacola está vazia.");
+        return;
+      }
+
+      // 1) Checa sessão
+      const { data: u } = await supabase.auth.getUser();
+      const sessionUser = u?.user ?? null;
+
+      if (!sessionUser) {
+        router.replace(`/auth?next=${encodeURIComponent("/bag?checkout=1#pix")}`);
+        return;
+      }
+
+      // 2) Garante e-mail (usa o do user ou do perfil como fallback)
+      const email = sessionUser.email || profile?.email || null;
+      if (!email) {
+        router.replace(`/profile?next=${encodeURIComponent("/bag?checkout=1#pix")}`);
+        return;
+      }
+
+      // 3) Antes de gerar o PIX, salva possíveis mudanças de endereço no perfil
+      await saveAddressToProfile();
+
+      // 4) PIX config
+      const key = (process.env.NEXT_PUBLIC_PIX_KEY || "").replace(/\D/g, "");
+      const merchant = (process.env.NEXT_PUBLIC_PIX_MERCHANT || "LOOK PAGAMENTOS").toUpperCase();
+      const cityPay = (process.env.NEXT_PUBLIC_PIX_CITY || "SAO PAULO").toUpperCase();
+      if (!key) {
+        setErr("Chave PIX não configurada.");
+        return;
+      }
+
+      const { subtotal } = bagTotals(items);
+      const uniqueStores = Array.from(new Set(items.map((it) => it.store_name)));
+      const delivery = items.length > 0 ? DELIVERY_FEE * uniqueStores.length : 0;
+      const total = items.length > 0 ? subtotal + delivery : 0;
+
+      const txid = `LOOK${Date.now()}`.slice(0, 25);
+      const payload = buildPix({ key, merchant, city: cityPay, amount: total, txid });
+
+      // resumo dos itens para Notes
+      const itemsSummary = items
+        .map(
+          (it) =>
+            `• ${it.name} (${it.size}) — ${it.store_name} — x${it.qty} — R$ ${(
+              it.unit_price * it.qty
+            ).toFixed(2)}`
+        )
+        .join("\n");
+
+      setCreating(true);
+
+      await createOrder({
+        Status: "Aguardando Pagamento",
+
+        Name: profile?.name || "",
+        "User Email": email,
+        "User WhatsApp": profile?.whatsapp || "",
+        Street: street.trim() || profile?.street || "",
+        Number: number.trim() || profile?.number || "",
+        Complement: (complement || "").trim() || profile?.complement || "",
+        CEP: onlyDigits(cep) || profile?.cep || "",
+        City: city.trim() || profile?.city || "São Paulo",
+
+        "Item Price": Number(subtotal.toFixed(2)),
+        "Delivery Fee": Number(delivery.toFixed(2)),
+        Total: Number(total.toFixed(2)),
+
+        "Product ID": items.map((it) => String(it.product_id)).join(", "),
+        "Product Name": items.map((it) => it.name).join(" | "),
+        "Store Name": items.map((it) => it.store_name).join(", "),
+        Size: items.map((it) => it.size).join(", "),
+
+        Notes: `Items:\n${itemsSummary}\n\nLojas distintas: ${uniqueStores.length}\nTXID: ${txid}`,
+        "PIX Code": payload,
+      });
+
+      setPixCode(payload);
+      setOkMsg("Pedido criado! Pague via PIX para prosseguir.");
+      setStep("pix"); // vai para a etapa do PIX
+
+      // rola até a seção do PIX
+      setTimeout(() => {
+        if (typeof window !== "undefined") {
+          const el = document.querySelector("#pix-section");
+          el?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 50);
+    } catch (e: any) {
+      setErr(e.message ?? "Erro ao criar pedido");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function copyPix() {
     if (!pixCode) return;
@@ -288,12 +374,19 @@ function BagPageInner() {
     setOkMsg("Pagamento confirmado manualmente. Obrigado!");
   }
 
+  // UI
+
+  const { subtotal: st } = bagTotals(items);
+  const deliveryUi = items.length > 0 ? DELIVERY_FEE * uniqueStores.length : 0;
+  const totalUi = items.length > 0 ? st + deliveryUi : 0;
+
   return (
     <main className="p-4 max-w-md mx-auto">
       <h1 className="text-2xl font-semibold mb-1">Bag</h1>
       <p className="text-sm text-gray-700 mb-4">Revise seus itens</p>
 
-      {items.length === 0 && !pixCode ? (
+      {/* Etapa 1: revisão da sacola */}
+      {step === "review" && items.length === 0 && !pixCode ? (
         <div className="rounded-xl border p-4 bg-white">
           <p className="text-sm">Sua sacola está vazia.</p>
           <Link
@@ -303,7 +396,7 @@ function BagPageInner() {
             Voltar para explorar
           </Link>
         </div>
-      ) : (
+      ) : step === "review" ? (
         <>
           {!pixCode && (
             <>
@@ -325,55 +418,54 @@ function BagPageInner() {
                       <p className="text-xs text-gray-600">{it.store_name}</p>
                       <p className="text-xs text-gray-600">Size: {it.size}</p>
                       <div className="mt-1 flex items-center gap-2">
-  <span className="text-xs text-gray-600">Qtd</span>
+                        <span className="text-xs text-gray-600">Qtd</span>
 
-  {/* Quantidade: – [n] + */}
-  <div className="inline-flex items-center rounded-full border border-gray-200 overflow-hidden">
-    <button
-      type="button"
-      onClick={() => setItems(updateQty(i, Math.max(1, it.qty - 1)))}
-      className="h-8 w-8 text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition"
-      aria-label="Diminuir quantidade"
-    >
-      –
-    </button>
-    <div className="w-8 text-center text-sm font-medium tabular-nums select-none">
-      {it.qty}
-    </div>
-    <button
-      type="button"
-      onClick={() => setItems(updateQty(i, it.qty + 1))}
-      className="h-8 w-8 text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition"
-      aria-label="Aumentar quantidade"
-    >
-      +
-    </button>
-  </div>
+                        {/* Quantidade: – [n] + */}
+                        <div className="inline-flex items-center rounded-full border border-gray-200 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setItems(updateQty(i, Math.max(1, it.qty - 1)))}
+                            className="h-8 w-8 text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition"
+                            aria-label="Diminuir quantidade"
+                          >
+                            –
+                          </button>
+                          <div className="w-8 text-center text-sm font-medium tabular-nums select-none">
+                            {it.qty}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setItems(updateQty(i, it.qty + 1))}
+                            className="h-8 w-8 text-gray-700 hover:bg-gray-50 active:scale-[0.98] transition"
+                            aria-label="Aumentar quantidade"
+                          >
+                            +
+                          </button>
+                        </div>
 
-  {/* botão Remover (ver #2) */}
-  <button
-    onClick={() => setItems(removeFromBag(i))}
-    className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.98] shadow-sm transition"
-    aria-label={`Remover ${it.name} da sacola`}
-    title="Remover"
-  >
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      className="text-gray-700"
-    >
-      <path d="M3 6h18" strokeWidth="2" strokeLinecap="round" />
-      <path d="M8 6V4h8v2" strokeWidth="2" strokeLinecap="round" />
-      <path d="M19 6l-1 14H6L5 6" strokeWidth="2" strokeLinecap="round" />
-      <path d="M10 11v6M14 11v6" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-    Remover
-  </button>
-</div>
-
+                        {/* Remover */}
+                        <button
+                          onClick={() => setItems(removeFromBag(i))}
+                          className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.98] shadow-sm transition"
+                          aria-label={`Remover ${it.name} da sacola`}
+                          title="Remover"
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            className="text-gray-700"
+                          >
+                            <path d="M3 6h18" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M8 6V4h8v2" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M19 6l-1 14H6L5 6" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M10 11v6M14 11v6" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                          Remover
+                        </button>
+                      </div>
                     </div>
                     <div className="text-sm font-semibold">
                       R$ {(it.unit_price * it.qty).toFixed(2)}
@@ -385,7 +477,7 @@ function BagPageInner() {
               <div className="rounded-xl border p-4 bg-white mt-4">
                 <div className="flex items-center justify-between text-sm">
                   <span>Subtotal</span>
-                  <span>R$ {subtotal.toFixed(2)}</span>
+                  <span>R$ {st.toFixed(2)}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
@@ -399,12 +491,12 @@ function BagPageInner() {
                       </span>
                     )}
                   </span>
-                  <span>R$ {delivery.toFixed(2)}</span>
+                  <span>R$ {deliveryUi.toFixed(2)}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm font-semibold mt-1">
                   <span>Total</span>
-                  <span>R$ {total.toFixed(2)}</span>
+                  <span>R$ {totalUi.toFixed(2)}</span>
                 </div>
 
                 <div className="mt-4 flex flex-col space-y-3">
@@ -415,11 +507,10 @@ function BagPageInner() {
                     Continuar comprando
                   </Link>
                   <button
-                    onClick={handleCheckout}
-                    disabled={creating}
-                    className="w-full rounded-lg bg-black text-white py-2 text-sm font-semibold disabled:opacity-60"
+                    onClick={() => setStep("confirm")}
+                    className="w-full rounded-lg bg-black text-white py-2 text-sm font-semibold"
                   >
-                    {creating ? "Gerando PIX…" : "Continuar para pagamento"}
+                    Continuar para pagamento
                   </button>
                   {err && <p className="text-xs text-red-600">{err}</p>}
                   {okMsg && <p className="text-xs text-green-700">{okMsg}</p>}
@@ -427,18 +518,147 @@ function BagPageInner() {
               </div>
             </>
           )}
+        </>
+      ) : null}
 
-          {pixCode && (
-            <div
-              id="pix-section"
-              className="rounded-xl border p-4 bg-white mt-4"
+      {/* Etapa 2: confirmação/edição do endereço + botões de pagamento */}
+      {step === "confirm" && !pixCode && items.length > 0 && (
+        <div className="rounded-xl border p-4 bg-white mt-4">
+          <h2 className="text-lg font-semibold mb-2">Confirme seu endereço</h2>
+
+          {/* CEP */}
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-gray-700">CEP</label>
+            <input
+              value={cep}
+              onChange={(e) => setCep(e.target.value)}
+              inputMode="numeric"
+              placeholder="01311000"
+              className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 ${
+                cep.length > 0 && !cepValid(cep)
+                  ? "border-red-300 focus:ring-red-200 bg-red-50"
+                  : "border-gray-200 focus:ring-black/10 bg-white"
+              }`}
+            />
+          </div>
+
+          {/* Rua / Número */}
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <div className="col-span-2">
+              <label className="mb-1 block text-xs text-gray-700">Rua</label>
+              <input
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                placeholder="Rua Haddock Lobo"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-gray-700">Número</label>
+              <input
+                value={number}
+                onChange={(e) => setNumber(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                placeholder="123"
+              />
+            </div>
+          </div>
+
+          {/* Complemento */}
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-gray-700">Complemento</label>
+            <input
+              value={complement}
+              onChange={(e) => setComplement(e.target.value)}
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              placeholder="Apto 101 / Bloco B"
+            />
+          </div>
+
+          {/* Bairro */}
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-gray-700">Bairro</label>
+            <input
+              value={neighborhood}
+              onChange={(e) => setNeighborhood(e.target.value)}
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              placeholder="Bela Vista"
+            />
+          </div>
+
+          {/* Estado + Cidade */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="relative">
+              <label className="mb-1 block text-xs text-gray-700">Estado (UF)</label>
+              <select
+                value={stateUf}
+                onChange={(e) => setStateUf(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white appearance-none px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 pr-8"
+              >
+                {[
+                  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB",
+                  "PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
+                ].map((uf) => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-8 text-neutral-400">
+                ▼
+              </span>
+            </div>
+            <div className="relative">
+              <label className="mb-1 block text-xs text-gray-700">Cidade</label>
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                placeholder="São Paulo"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col space-y-3">
+            <button
+              onClick={handleCheckout}
+              disabled={creating}
+              className="w-full rounded-lg bg-black text-white py-2 text-sm font-semibold disabled:opacity-60"
             >
-              <h2 className="text-lg font-semibold mb-1">Pagamento PIX</h2>
-              <p className="text-xs text-gray-700 mb-3">
-                Escaneie o QR ou toque em “Copiar código” para pagar. Valor:{" "}
-                <b>R$ {total.toFixed(2)}</b>
-              </p>
+              {creating ? "Gerando PIX…" : "Pagar com Pix"}
+            </button>
+            <button
+              onClick={handleCheckout}
+              disabled={creating}
+              className="w-full rounded-lg bg-black text-white py-2 text-sm font-semibold disabled:opacity-60"
+            >
+              {creating ? "Gerando PIX…" : "Cartão de crédito (via Pix)"}
+            </button>
+            <button
+              onClick={() => setStep("review")}
+              className="w-full rounded-lg border px-3 py-2 text-sm text-center"
+            >
+              Voltar
+            </button>
+          </div>
 
+          {err && <p className="mt-3 text-xs text-red-600">{err}</p>}
+          {okMsg && <p className="mt-3 text-xs text-green-700">{okMsg}</p>}
+        </div>
+      )}
+
+      {/* Etapa 3: PIX */}
+      {(step === "pix" || pixCode) && (
+        <div
+          id="pix-section"
+          className="rounded-xl border p-4 bg-white mt-4"
+        >
+          <h2 className="text-lg font-semibold mb-1">Pagamento PIX</h2>
+          <p className="text-xs text-gray-700 mb-3">
+            Escaneie o QR ou toque em “Copiar código” para pagar. Valor:{" "}
+            <b>R$ {totalUi.toFixed(2)}</b>
+          </p>
+
+          {pixCode ? (
+            <>
               <div className="flex justify-center">
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
@@ -474,25 +694,28 @@ function BagPageInner() {
                   </Link>
                 </div>
               </div>
-
-              <p className="text-[11px] text-gray-500 mt-3">
-                Recebedor:{" "}
-                {(
-                  process.env.NEXT_PUBLIC_PIX_MERCHANT || "LOOK PAGAMENTOS"
-                ).toUpperCase()}{" "}
-                — Chave: {process.env.NEXT_PUBLIC_PIX_KEY || "(não definida)"}
-              </p>
-              {okMsg && <p className="text-xs text-green-700 mt-2">{okMsg}</p>}
-              {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
-            </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-600">Gerando PIX…</p>
           )}
-        </>
+
+          <p className="text-[11px] text-gray-500 mt-3">
+            Recebedor:{" "}
+            {(
+              process.env.NEXT_PUBLIC_PIX_MERCHANT || "LOOK PAGAMENTOS"
+            ).toUpperCase()}{" "}
+            — Chave: {process.env.NEXT_PUBLIC_PIX_KEY || "(não definida)"}
+          </p>
+          {okMsg && <p className="text-xs text-green-700 mt-2">{okMsg}</p>}
+          {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+        </div>
       )}
 
       <BottomNav />
     </main>
   );
 }
+
 export default function BagPage() {
   return (
     <Suspense fallback={<main className="p-4 max-w-md mx-auto">Carregando…</main>}>
