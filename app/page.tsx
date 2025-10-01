@@ -455,6 +455,13 @@ setProfile(null);
 const EPSILON = 0.08;            // chance de explorar (mostrar trending/aleatório)
 const JITTER = 0.08;             // ruído pequeno e determinístico
 const HF_DAYS = 14;              // meia-vida usada no decay local
+  // roda o decay só no cliente (evita tocar localStorage no SSR)
+  useEffect(() => {
+    try {
+      decayAll(HF_DAYS);
+    } catch {}
+  }, []);
+
 // pesos por feature (ajuste fino conforme perceber o comportamento)
 const W = {
   CAT: 1.00,
@@ -469,7 +476,6 @@ const W = {
 
 const filteredRanked = useMemo<Product[]>(() => {
   // aplica um decay leve a cada montagem/uso (barato e mantém prefs frescas)
-  decayAll(HF_DAYS);
 
   // lê V2 + fallback V1 (compat)
   const p2 = getPrefsV2();
@@ -621,42 +627,54 @@ const filteredRanked = useMemo<Product[]>(() => {
     ],
   } as const;
 
+    // agenda uma tarefa fora do ciclo de render (evita re-render na batida do clique)
+    const idle = (cb: () => void) => {
+      const ric: any =
+        (typeof window !== "undefined" && (window as any).requestIdleCallback) ||
+        null;
+      if (ric) ric(cb, { timeout: 500 });
+      else setTimeout(cb, 0);
+    };
+  
+    // registra interação sem setState (grava prefs + views direto no storage)
+    function recordInteraction(p: Product) {
+      try {
+        const cats = categoriesOf(p);
+        const mainCat = cats[0] || "";
+        if (mainCat) bumpCategory(mainCat, 1.2);
+        bumpStore(p.store_name || "", 1);
+        if (p.gender) bumpGender(p.gender, 0.8);
+        bumpPriceBucket(priceBucket(p.price_tag), 0.6);
+        const etaTxt = (p as any).eta_text_runtime ?? (p as any).eta_text ?? null;
+        bumpEtaBucket(etaBucket(etaTxt), 0.5);
+        bumpProduct(p.id, 0.25);
+  
+        // views locais: atualiza direto no localStorage (sem setViews → sem flicker)
+        const KEY = "look.metrics.v1.views";
+        const raw = localStorage.getItem(KEY);
+        const map = raw ? JSON.parse(raw) : {};
+        const k = String(p.id);
+        map[k] = (map[k] || 0) + 1;
+        localStorage.setItem(KEY, JSON.stringify(map));
+      } catch {}
+    }
+  
+
   // card de produto reaproveitando seu JSX atual
   function ProductCard({ p }: { p: Product }) {
     return (
       <Link
-        href={`/product/${p.id}`}
-        onClick={() => {
-          // categorias (principal + demais)
-          const cats = categoriesOf(p);
-          const mainCat = cats[0] || "";
-          if (mainCat) bumpCategory(mainCat, 1.2); // leve bônus para a principal
-        
-          // loja
-          bumpStore(p.store_name || "", 1);
-        
-          // gênero (se existir)
-          if (p.gender) bumpGender(p.gender, 0.8);
-        
-          // preço e ETA
-          bumpPriceBucket(priceBucket(p.price_tag), 0.6);
-          const etaTxt = (p as any).eta_text_runtime ?? (p as any).eta_text ?? null;
-          bumpEtaBucket(etaBucket(etaTxt), 0.5);
-        
-          // micro boost por produto (ajuda a personalizar finamente)
-          bumpProduct(p.id, 0.25);
-        
-          // métrica local de views (mantido)
-          setViews((prev) => {
-            const next = { ...prev };
-            const k = String(p.id);
-            next[k] = (next[k] || 0) + 1;
-            return next;
-          });
-        }}
-        
-        className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
-      >
+  href={`/product/${p.id}`}
+  prefetch
+  onMouseEnter={() => router.prefetch(`/product/${p.id}`)}
+  onClick={() => {
+    // agenda a gravação fora do ciclo de render (sem reordenar a Home antes da navegação)
+    idle(() => recordInteraction(p));
+    // deixa o <Link> navegar imediatamente
+  }}
+  className="rounded-2xl surface shadow-soft overflow-hidden hover:shadow-soft transition border border-warm"
+>
+
         <div className="relative h-44">
           <span className="absolute left-2 bottom-2 rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow border bg-[#141414] border-[#141414]">
             {formatBRLAlpha(p.price_tag)}
