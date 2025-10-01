@@ -98,12 +98,32 @@ type Profile = {
   cpf?: string | null;
 };
 
+
+
 // ===== helpers de validação =====
 function onlyDigits(v: string) {
   return (v || "").replace(/\D/g, "");
 }
 function cepValid(cep: string) {
   return onlyDigits(cep).length === 8;
+}
+
+// Busca endereço no ViaCEP (CEP sem máscara)
+async function fetchAddress(cep: string) {
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.erro) return null;
+    return {
+      street: data.logradouro || "",
+      neighborhood: data.bairro || "",
+      city: data.localidade || "",
+      uf: (data.uf || "").toUpperCase(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function BagPageInner() {
@@ -114,6 +134,8 @@ function BagPageInner() {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const router = useRouter();
   const search = useSearchParams();
+
+  
 
   // controle de etapas
   const [step, setStep] = useState<"review" | "confirm" | "pix">("review");
@@ -183,14 +205,37 @@ function BagPageInner() {
     })();
   }, []);
 
-  // Se veio com ?checkout=1 → vai para etapa de confirmação (não gera PIX direto)
-  useEffect(() => {
-    const wantsCheckout = search?.get("checkout") === "1";
-    if (!wantsCheckout) return;
-    if (items.length === 0) return;
-    if (!profile?.id) return;
+  // Auto-preencher endereço quando CEP atingir 8 dígitos
+useEffect(() => {
+  const digits = onlyDigits(cep);
+  if (digits.length === 8) {
+    fetchAddress(digits).then((addr) => {
+      if (!addr) return;
+      setStreet(addr.street);
+      setNeighborhood(addr.neighborhood);
+      setCity(addr.city);
+      if (addr.uf) setStateUf(addr.uf);
+    });
+  }
+}, [cep]);
+
+
+  // Se veio com ?checkout=1, exige login antes de abrir a confirmação
+useEffect(() => {
+  const wantsCheckout = search?.get("checkout") === "1";
+  if (!wantsCheckout) return;
+  if (items.length === 0) return;
+
+  (async () => {
+    const { data } = await supabase.auth.getUser();
+    if (!data?.user) {
+      router.replace(`/auth?next=${encodeURIComponent("/bag?checkout=1")}`);
+      return;
+    }
     setStep("confirm");
-  }, [search, profile?.id, items.length]);
+  })();
+}, [search, items.length, router]);
+
 
   function handleQty(i: number, q: number) {
     setItems(updateQty(i, Math.max(1, q)));
@@ -252,6 +297,18 @@ function BagPageInner() {
         : prev
     );
   }
+
+  // Ao continuar, exige estar logado; se não, vai para /auth e volta ao /bag?checkout=1
+async function handleContinue() {
+  const { data } = await supabase.auth.getUser();
+  const logged = !!data?.user;
+  if (!logged) {
+    router.replace(`/auth?next=${encodeURIComponent("/bag?checkout=1")}`);
+    return;
+  }
+  setStep("confirm");
+}
+
 
   async function handleCheckout() {
     try {
@@ -487,11 +544,11 @@ function BagPageInner() {
                     Continuar comprando
                   </Link>
                   <button
-                    onClick={() => setStep("confirm")}
-                    className="w-full rounded-lg bg-black text-white py-2 text-sm font-semibold"
-                  >
-                    Continuar para pagamento
-                  </button>
+  onClick={handleContinue}
+  className="w-full rounded-lg bg-black text-white py-2 text-sm font-semibold"
+>
+  Continuar para pagamento
+</button>
                   {err && <p className="text-xs text-red-600">{err}</p>}
                   {okMsg && <p className="text-xs text-green-700">{okMsg}</p>}
                 </div>
